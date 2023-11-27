@@ -5,6 +5,26 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "hub",
+      "cwd": "driver\\hub",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "hub (profile mode)",
+      "cwd": "driver\\hub",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile"
+    },
+    {
+      "name": "hub (release mode)",
+      "cwd": "driver\\hub",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release"
+    },
+    {
       "name": "launcher",
       "cwd": "passenger\\launcher",
       "request": "launch",
