@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'config.dart';
+
 void main() {
   runApp(const RideHub());
 }
@@ -16,7 +18,7 @@ class RideHub extends StatelessWidget {
         ),
         home: Scaffold(
           appBar: AppBar(title: const Text('RIDE Hub')),
-          body: const Text('home'),
+          body: const Config(),
         ),
       );
 }
