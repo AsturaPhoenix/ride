@@ -10,7 +10,7 @@ class NavTray extends StatefulWidget {
   State<StatefulWidget> createState() => NavTrayState();
 }
 
-class NavTrayState extends State {
+class NavTrayState extends State<NavTray> {
   late Future<List<ApplicationWithIcon>> _apps;
 
   @override

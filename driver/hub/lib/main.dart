@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'config.dart';
+import 'widgets/config.dart';
 
 void main() {
   runApp(const RideHub());

@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 
-import 'nav_tray.dart';
+import 'core/client.dart';
+import 'core/config.dart';
+import 'ui/nav_tray.dart';
 
-void main() {
-  runApp(const RideLauncher());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final config = await Config.load();
+
+  runApp(RideLauncher(clientManager: ClientManager(config)..start()));
 }
 
 class RideLauncher extends StatelessWidget {
-  const RideLauncher({super.key});
+  final ClientManager clientManager;
+  const RideLauncher({super.key, required this.clientManager});
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -28,9 +35,12 @@ class RideLauncher extends StatelessWidget {
         ),
         home: WillPopScope(
           onWillPop: () async => false,
-          child: const Scaffold(
-            body: Text('home'),
-            bottomNavigationBar: NavTray(),
+          child: Scaffold(
+            body: ListenableBuilder(
+              listenable: clientManager,
+              builder: (context, _) => Text(clientManager.status.toString()),
+            ),
+            bottomNavigationBar: const NavTray(),
           ),
         ),
       );
