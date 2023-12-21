@@ -33,8 +33,8 @@ class RideLauncher extends StatelessWidget {
             backgroundColor: Colors.grey.shade700,
           ),
         ),
-        home: WillPopScope(
-          onWillPop: () async => false,
+        home: PopScope(
+          canPop: false,
           child: Scaffold(
             body: ListenableBuilder(
               listenable: clientManager,
