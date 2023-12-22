@@ -13,8 +13,18 @@ import 'config.dart';
 
 enum ClientStatus { disconnected, connecting, connected }
 
+abstract class ClientListener {
+  void assetsChanged();
+}
+
 class ClientManager extends ChangeNotifier {
   final Config config;
+  ClientListener? _listener;
+  ClientListener? get listener => _listener;
+  set listener(ClientListener? value) {
+    _listener = value;
+    _client?.listener = value;
+  }
 
   StreamSubscription? _subscription;
   CancelableOperation<void>? _connectionTask;
@@ -31,7 +41,7 @@ class ClientManager extends ChangeNotifier {
             : ClientStatus.disconnected;
   }
 
-  ClientManager(this.config);
+  ClientManager(this.config, {ClientListener? listener}) : _listener = listener;
 
   @override
   void dispose() {
@@ -42,6 +52,8 @@ class ClientManager extends ChangeNotifier {
   CancelableOperation<void> _maintainConnection() =>
       Client.connectWithRetry(config).thenOperation(
         (client, completer) async {
+          client.listener = listener;
+
           _client = client;
           notifyListeners();
           await client.disconnected;
@@ -109,6 +121,7 @@ class Client {
 
   final Config config;
   final Sink<Message> _socket;
+  ClientListener? listener;
 
   void Function()? onAssetsReceived;
 
@@ -116,8 +129,12 @@ class Client {
   bool get isConnected => !_disconnected.isCompleted;
   Future<void> get disconnected => _disconnected.future;
 
-  Client({required this.config, required Socket socket, this.onAssetsReceived})
-      : _socket = encoder.startChunkedConversion(socket) {
+  Client({
+    required this.config,
+    required Socket socket,
+    this.onAssetsReceived,
+    this.listener,
+  }) : _socket = encoder.startChunkedConversion(socket) {
     socket.transform(decoder).listen(_dispatch, onDone: _disconnected.complete);
 
     _send(['id', config.id]);
@@ -144,8 +161,11 @@ class Client {
         }
         await extractArchiveToDiskAsync(archive, path);
 
+        listener?.assetsChanged();
+
         config.assetsVersion = computeAssetsVersion(assets);
         _send(['assets', config.assetsVersion]);
+
         break;
     }
   }
