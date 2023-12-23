@@ -38,6 +38,7 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
   device_apps: ^2.2.0
+  flutter_background_service: ^5.0.5
   network_info_plus: ^4.1.0
   path: ^1.8.3
   path_provider: ^2.1.1
@@ -49,6 +50,7 @@ dependencies:
   yaml: ^3.1.2
 
 dependency_overrides:
+  flutter_background_service_android: 6.0.1 # Android 33 support
   meta: 1.10.0
 
 dev_dependencies:

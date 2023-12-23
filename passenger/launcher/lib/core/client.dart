@@ -5,6 +5,7 @@ import 'package:archive/archive_io.dart';
 import 'package:async/async.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:retry/retry.dart';
 import 'package:ride_shared/protocol.dart';
@@ -18,81 +19,153 @@ abstract class ClientListener {
 }
 
 class ClientManager extends ChangeNotifier {
-  final Config config;
-  ClientListener? _listener;
-  ClientListener? get listener => _listener;
-  set listener(ClientListener? value) {
-    _listener = value;
-    _client?.listener = value;
+  static Future<ClientManager> initialize() async {
+    final service = FlutterBackgroundService();
+
+    if (!await service.configure(
+      iosConfiguration: IosConfiguration(),
+      androidConfiguration: AndroidConfiguration(
+        onStart: Client.main,
+        isForegroundMode: true,
+        autoStart: false,
+        autoStartOnBoot: false,
+        initialNotificationTitle: 'RIDE Launcher',
+        initialNotificationContent: 'Client is running.',
+      ),
+    )) {
+      throw 'Failed to configure background service.';
+    }
+
+    final stateStream = service.on('syncState');
+    if (await service.isRunning()) {
+      service.invoke('syncState');
+      return ClientManager(
+        initialStatus: (await stateStream.first)!['status'] as ClientStatus,
+        stateStream: stateStream,
+      );
+    } else {
+      return ClientManager(stateStream: stateStream);
+    }
   }
 
-  StreamSubscription? _subscription;
-  CancelableOperation<void>? _connectionTask;
-  Client? _client;
-  Client? get client => _client;
-  ClientStatus get status {
-    assert(_connectionTask == null || !_connectionTask!.isCanceled);
-    assert(_client == null || _client!.isConnected);
+  ClientListener? listener;
 
-    return _client != null
-        ? ClientStatus.connected
-        : _connectionTask != null
-            ? ClientStatus.connecting
-            : ClientStatus.disconnected;
+  ClientStatus _status;
+  ClientStatus get status => _status;
+
+  final Stream<Map<String, dynamic>?>? stateStream;
+  late final StreamSubscription? _stateSubscription;
+
+  ClientManager({
+    this.listener,
+    ClientStatus initialStatus = ClientStatus.disconnected,
+    this.stateStream,
+  }) : _status = initialStatus {
+    _stateSubscription = stateStream?.listen((event) {
+      _status = ClientState.fromJson(event!).status;
+      notifyListeners();
+    });
   }
-
-  ClientManager(this.config, {ClientListener? listener}) : _listener = listener;
 
   @override
   void dispose() {
     stop();
+    _stateSubscription?.cancel();
     super.dispose();
   }
 
-  CancelableOperation<void> _maintainConnection() =>
-      Client.connectWithRetry(config).thenOperation(
-        (client, completer) async {
-          client.listener = listener;
-
-          _client = client;
-          notifyListeners();
-          await client.disconnected;
-          _client = null;
-          notifyListeners();
-          if (!completer.isCanceled) {
-            completer.completeOperation(_maintainConnection());
-          }
-        },
-        onCancel: (completer) => _client?.close(),
-      );
-
-  void start() {
-    _subscription ??=
-        Connectivity().onConnectivityChanged.listen((connectivityResult) async {
-      _subscription!.pause();
-
-      await _connectionTask?.cancel();
-      _connectionTask = null;
-
-      if (connectivityResult == ConnectivityResult.wifi) {
-        _connectionTask = _maintainConnection();
-      }
-
-      notifyListeners();
-
-      _subscription!.resume();
-    });
+  Future<void> start() async {
+    if (!await FlutterBackgroundService().startService()) {
+      throw 'Failed to start background service.';
+    }
   }
 
   Future<void> stop() async {
-    await _subscription?.cancel();
-    _subscription = null;
-    await _connectionTask?.cancel();
-    _connectionTask = null;
+    final service = FlutterBackgroundService();
+
+    service.invoke('stop');
+
+    // We'll have to poll for stop.
+    const pollInterval = Duration(seconds: 1);
+    while (await service.isRunning()) {
+      await Future.delayed(pollInterval);
+    }
   }
 }
 
+class _ServiceListener implements ClientListener {
+  final ServiceInstance service;
+  _ServiceListener(this.service);
+
+  @override
+  void assetsChanged() => service.invoke('assetsChanged');
+}
+
+class ClientState {
+  final ClientStatus status;
+  const ClientState({required this.status});
+
+  ClientState.fromJson(Map<String, dynamic> map)
+      : this(status: ClientStatus.values[map['status'] as int]);
+
+  Map<String, dynamic> toJson() => {'status': status.index};
+}
+
 class Client {
+  @pragma('vm:entry-point')
+  static Future<void> main(ServiceInstance service) async {
+    try {
+      final listener = _ServiceListener(service);
+      final config = await Config.load();
+
+      void setStatus(ClientStatus status) =>
+          service.invoke('syncState', ClientState(status: status).toJson());
+
+      Client? client;
+      CancelableOperation<void>? connectionTask;
+
+      CancelableOperation<void> maintainConnection() =>
+          Client.connectWithRetry(config).thenOperation(
+            (newClient, completer) async {
+              newClient.listener = listener;
+
+              client = newClient;
+              setStatus(ClientStatus.connected);
+
+              await newClient.disconnected;
+              client = null;
+              setStatus(ClientStatus.disconnected);
+
+              if (!completer.isCanceled) {
+                completer.completeOperation(maintainConnection());
+              }
+            },
+            onCancel: (completer) => client?.close(),
+          );
+
+      final subscription = Connectivity()
+          .onConnectivityChanged
+          .listen((connectivityResult) async {
+        await connectionTask?.cancel();
+        connectionTask = null;
+
+        if (connectivityResult == ConnectivityResult.wifi) {
+          connectionTask = maintainConnection();
+          setStatus(ClientStatus.connecting);
+        } else {
+          setStatus(ClientStatus.disconnected);
+        }
+      });
+
+      await service.on('stop').first;
+
+      await subscription.cancel();
+      await connectionTask?.cancel();
+    } finally {
+      await service.stopSelf();
+    }
+  }
+
   static Future<Client> connect(
     Config config, [
     dynamic host,

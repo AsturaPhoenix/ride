@@ -53,6 +53,7 @@ class ServerManager extends ChangeNotifier {
 
   static Future<ServerManager> initialize() async {
     final service = FlutterBackgroundService();
+
     if (!await service.configure(
       iosConfiguration: IosConfiguration(),
       androidConfiguration: AndroidConfiguration(

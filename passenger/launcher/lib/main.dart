@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
 
 import 'core/client.dart';
-import 'core/config.dart';
 import 'ui/greetings.dart';
 import 'ui/nav_tray.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final config = await Config.load();
-
-  runApp(RideLauncher(clientManager: ClientManager(config)..start()));
+  runApp(
+    RideLauncher(
+      clientManager: await ClientManager.initialize()
+        ..start(),
+    ),
+  );
 }
 
 class RideLauncher extends StatefulWidget {
   final ClientManager clientManager;
-  const RideLauncher({super.key, required this.clientManager});
+  RideLauncher({super.key, ClientManager? clientManager})
+      : clientManager = clientManager ?? ClientManager();
 
   @override
   State<RideLauncher> createState() => _RideLauncherState();
