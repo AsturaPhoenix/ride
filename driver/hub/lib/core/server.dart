@@ -23,14 +23,14 @@ class ServerManager extends ChangeNotifier {
 
   ServerManager._(
     this._lifecycleState,
-    Stream<Map<String, dynamic>?> stateStream, [
-    Map<String, dynamic>? initialState,
+    Stream<ServerState?> stateStream, [
+    ServerState? initialState,
   ]) {
-    _syncState(ServerState.fromNullableJson(initialState));
+    _syncState(initialState);
 
     _stateSubscription = stateStream.listen(
-      (event) {
-        _syncState(ServerState.fromNullableJson(event));
+      (state) {
+        _syncState(state);
         notifyListeners();
       },
       onError: (e) {
@@ -68,7 +68,8 @@ class ServerManager extends ChangeNotifier {
       throw 'Failed to configure background service.';
     }
 
-    final stateStream = service.on('syncState');
+    final stateStream =
+        service.on('syncState').map(ServerState.fromNullableJson);
     if (await service.isRunning()) {
       service.invoke('syncState');
       return ServerManager._(
@@ -326,6 +327,9 @@ class Server extends ChangeNotifier {
   Future<Uint8List>? assetsFetch;
 
   Future<void> pushAssets([Sink<Message>? connection]) async {
+    lastErrors.assets = null;
+    notifyListeners();
+
     try {
       // Reload config in case the assets changed.
       await config.reload();

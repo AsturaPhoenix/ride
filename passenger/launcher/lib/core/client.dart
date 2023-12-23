@@ -36,11 +36,12 @@ class ClientManager extends ChangeNotifier {
       throw 'Failed to configure background service.';
     }
 
-    final stateStream = service.on('syncState');
+    final stateStream =
+        service.on('syncState').map((event) => ClientState.fromJson(event!));
     if (await service.isRunning()) {
       service.invoke('syncState');
       return ClientManager(
-        initialStatus: (await stateStream.first)!['status'] as ClientStatus,
+        initialStatus: (await stateStream.first).status,
         stateStream: stateStream,
       );
     } else {
@@ -53,7 +54,7 @@ class ClientManager extends ChangeNotifier {
   ClientStatus _status;
   ClientStatus get status => _status;
 
-  final Stream<Map<String, dynamic>?>? stateStream;
+  final Stream<ClientState>? stateStream;
   late final StreamSubscription? _stateSubscription;
 
   ClientManager({
@@ -61,8 +62,8 @@ class ClientManager extends ChangeNotifier {
     ClientStatus initialStatus = ClientStatus.disconnected,
     this.stateStream,
   }) : _status = initialStatus {
-    _stateSubscription = stateStream?.listen((event) {
-      _status = ClientState.fromJson(event!).status;
+    _stateSubscription = stateStream?.listen((state) {
+      _status = state.status;
       notifyListeners();
     });
   }
