@@ -18,6 +18,8 @@ abstract class ClientListener {
   void assetsChanged();
 }
 
+typedef ClientEvents = ({Stream<ClientState>? state, Stream? assetsChanged});
+
 class ClientManager extends ChangeNotifier {
   static Future<ClientManager> initialize() async {
     final service = FlutterBackgroundService();
@@ -36,16 +38,19 @@ class ClientManager extends ChangeNotifier {
       throw 'Failed to configure background service.';
     }
 
-    final stateStream =
-        service.on('syncState').map((event) => ClientState.fromJson(event!));
+    final streams = (
+      state:
+          service.on('syncState').map((event) => ClientState.fromJson(event!)),
+      assetsChanged: service.on('assetsChanged'),
+    );
     if (await service.isRunning()) {
       service.invoke('syncState');
       return ClientManager(
-        initialStatus: (await stateStream.first).status,
-        stateStream: stateStream,
+        initialStatus: (await streams.state.first).status,
+        streams: streams,
       );
     } else {
-      return ClientManager(stateStream: stateStream);
+      return ClientManager(streams: streams);
     }
   }
 
@@ -54,24 +59,29 @@ class ClientManager extends ChangeNotifier {
   ClientStatus _status;
   ClientStatus get status => _status;
 
-  final Stream<ClientState>? stateStream;
-  late final StreamSubscription? _stateSubscription;
+  final ClientEvents? streams;
+  late final Iterable<StreamSubscription> _subscriptions;
 
   ClientManager({
     this.listener,
     ClientStatus initialStatus = ClientStatus.disconnected,
-    this.stateStream,
+    this.streams,
   }) : _status = initialStatus {
-    _stateSubscription = stateStream?.listen((state) {
-      _status = state.status;
-      notifyListeners();
-    });
+    _subscriptions = [
+      streams?.state?.listen((state) {
+        _status = state.status;
+        notifyListeners();
+      }),
+      streams?.assetsChanged?.listen((_) => listener?.assetsChanged()),
+    ].nonNulls;
   }
 
   @override
   void dispose() {
     stop();
-    _stateSubscription?.cancel();
+    for (final subscription in _subscriptions) {
+      subscription.cancel();
+    }
     super.dispose();
   }
 
