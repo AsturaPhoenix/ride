@@ -62,7 +62,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
           useMaterial3: true,
           elevatedButtonTheme: ElevatedButtonThemeData(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
+              backgroundColor: Colors.grey.shade100,
               foregroundColor: Colors.black,
               textStyle: const TextStyle(fontSize: 22),
             ),
@@ -75,7 +75,12 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
           canPop: false,
           child: Scaffold(
             body: Greetings(controller: greetingsController),
-            bottomNavigationBar: const NavTray(),
+            bottomNavigationBar: ListenableBuilder(
+              listenable: widget.clientManager,
+              builder: (context, _) => NavTray(
+                locked: widget.clientManager.status == ClientStatus.connected,
+              ),
+            ),
           ),
         ),
       );
