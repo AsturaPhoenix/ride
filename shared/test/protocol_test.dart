@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:test/test.dart';
-
 import 'package:ride_shared/protocol.dart';
+import 'package:test/test.dart';
 
 void main() {
   test('codec roundtrip', () {

@@ -45,6 +45,8 @@ dependencies:
   path_provider: ^2.1.1
   quiver: ^3.2.1
   retry: ^3.1.2
+  ride_device_policy:
+    path: ../device_policy
   ride_shared:
     path: ../../shared
   shared_preferences: ^2.2.2

@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:retry/retry.dart';
+import 'package:ride_device_policy/ride_device_policy.dart';
 import 'package:ride_shared/protocol.dart';
 
 import 'config.dart';
@@ -203,6 +204,10 @@ class Client {
     return completer.operation;
   }
 
+  static Future<void> applyDevicePolicy() async {
+    await RideDevicePolicy.setScreenOffTimeout(const Duration(days: 1));
+  }
+
   final Config config;
   final Sink<Message> _socket;
   ClientListener? listener;
@@ -223,6 +228,8 @@ class Client {
 
     _send(['id', config.id]);
     _send(['assets', config.assetsVersion]);
+
+    applyDevicePolicy();
   }
 
   void close() => _socket.close();
