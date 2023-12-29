@@ -14,7 +14,7 @@ enum RideAppCategory {
   info,
   music(['com.spotify.music']),
   video(['com.netflix.mediaclient', 'com.amazon.youtube_apk']),
-  internet(['com.amazon.cloud9']),
+  browser(['com.amazon.cloud9']),
   other;
 
   static final Map<String, RideAppCategory> _appIndex = {
@@ -207,7 +207,7 @@ class NavTrayState extends State<NavTray> {
             RideAppCategory.info: 'Info',
             RideAppCategory.music: 'Music',
             RideAppCategory.video: 'Video',
-            RideAppCategory.internet: 'Internet',
+            RideAppCategory.browser: 'Browser',
             if (!widget.locked) RideAppCategory.other: 'Other',
           }.entries.map(
                 (entry) => (
