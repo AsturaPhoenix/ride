@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/config.dart' as core;
+import '../core/fake_server.dart';
 import '../core/server.dart' as core;
 import 'assets.dart';
 import 'server.dart';
@@ -24,7 +26,10 @@ class ConfigState extends State<Config> {
     () async {
       final [config, serverManager] = await Future.wait([
         core.Config.load(),
-        core.ServerManager.initialize(),
+        if (kIsWeb)
+          Future.value(FakeServerManager())
+        else
+          core.ServerManager.initialize(),
       ]);
 
       config as core.Config;

@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'icons.dart';
@@ -54,7 +55,11 @@ class Assets extends StatelessWidget {
                   : () async {
                       final result = await FilePicker.platform.pickFiles();
                       if (result != null) {
-                        onPick!(result.files.first.identifier!);
+                        onPick!(
+                          kIsWeb
+                              ? 'fake assets'
+                              : result.files.first.identifier!,
+                        );
                       }
                     },
               icon: const Icon(Icons.file_open),
