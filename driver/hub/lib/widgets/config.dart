@@ -5,6 +5,7 @@ import '../core/config.dart' as core;
 import '../core/fake_server.dart';
 import '../core/server.dart' as core;
 import 'assets.dart';
+import 'devices.dart';
 import 'server.dart';
 
 class Config extends StatefulWidget {
@@ -119,6 +120,7 @@ class ConfigState extends State<Config> {
                     ? (value) => setState(() => config.serverPort = value)
                     : null,
               ),
+              if (serverState != null) Devices(serverManager: serverManager),
             ],
           );
         },

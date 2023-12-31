@@ -10,10 +10,19 @@ class MethodChannelRideDevicePolicy extends RideDevicePolicyPlatform {
   final methodChannel = const MethodChannel('ride_device_policy');
 
   @override
-  Future<void> setSystemSetting(String setting, String value) =>
+  Future<bool> requestAdminIfNeeded([String? explanation]) async =>
+      await methodChannel.invokeMethod('requestAdminIfNeeded', explanation)
+          as bool;
+  @override
+  Future<void> setSystemSetting(String setting, String? value) =>
       methodChannel.invokeMethod('setSystemSetting', [setting, value]);
-
   @override
   Future<String?> getSystemSetting(String setting) =>
       methodChannel.invokeMethod<String>('getSystemSetting', setting);
+  @override
+  Future<void> home() => methodChannel.invokeMethod('home');
+  @override
+  Future<void> wakeUp() => methodChannel.invokeMethod('wakeUp');
+  @override
+  Future<void> lockNow() => methodChannel.invokeMethod('lockNow');
 }

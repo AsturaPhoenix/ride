@@ -1,4 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="io.baku.ride_device_policy">
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.LOCK_DEVICE" />
+    <application
+        android:name="${applicationName}">
+        <receiver
+            android:name=".RideDevicePolicyPlugin"
+            android:enabled="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true"
+            >
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin_receiver" />
+
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

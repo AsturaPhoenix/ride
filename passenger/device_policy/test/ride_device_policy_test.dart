@@ -14,8 +14,13 @@ class FakeRideDevicePolicyPlatform extends Fake
   };
 
   @override
-  Future<void> setSystemSetting(String setting, String value) async =>
+  Future<void> setSystemSetting(String setting, String? value) async {
+    if (value == null) {
+      data.remove(setting);
+    } else {
       data[setting] = value;
+    }
+  }
 
   @override
   Future<String?> getSystemSetting(String setting) async => data[setting];

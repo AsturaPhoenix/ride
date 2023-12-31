@@ -2,15 +2,16 @@
 
 A new Flutter project.
 
-## Getting Started
+## Provisioning
 
-This project is a starting point for a Flutter application.
+Fire tablets are particularly resistant to disabling the keyguard. To disable the lockscreen:
 
-A few resources to get you started if this is your first Flutter project:
+```shell
+adb shell su -c sqlite3 /data/system/locksettings.db
+UPDATE locksettings SET value = '1' WHERE name = 'lockscreen.disabled';
+adb reboot
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+The base API level is 22. Things that didn't work:
+* `KeyguardManager`: permission denied even if in manifest.
+* `LayoutParams`: ignored.

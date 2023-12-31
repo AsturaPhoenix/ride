@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ride_device_policy/ride_device_policy.dart';
 
 import 'core/client.dart';
 import 'ui/greetings.dart';
@@ -7,12 +8,15 @@ import 'ui/nav_tray.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(
-    RideLauncher(
-      clientManager: await ClientManager.initialize()
-        ..start(),
-    ),
-  );
+  // TODO: Fail more gracefully.
+  if (await RideDevicePolicy.requestAdminIfNeeded()) {
+    runApp(
+      RideLauncher(
+        clientManager: await ClientManager.initialize()
+          ..start(),
+      ),
+    );
+  }
 }
 
 class RideLauncher extends StatefulWidget {

@@ -161,6 +161,8 @@ class ServerManager extends ChangeNotifier {
   }
 
   void pushAssets() => FlutterBackgroundService().invoke('pushAssets');
+  void wakeAll() => FlutterBackgroundService().invoke('wakeAll');
+  void sleepAll() => FlutterBackgroundService().invoke('sleepAll');
 }
 
 class ServerErrors {
@@ -271,6 +273,8 @@ class Server extends ChangeNotifier {
       final subscriptions = [
         service.on('syncState').listen((_) => syncState()),
         service.on('pushAssets').listen((_) => server.pushAssets()),
+        service.on('wakeAll').listen((_) => server.wakeAll()),
+        service.on('sleepAll').listen((_) => server.sleepAll()),
       ];
       await service.on('stop').first;
 
@@ -324,6 +328,29 @@ class Server extends ChangeNotifier {
     dispose();
   }
 
+  void _dispatch(Sink<Message> connection, Message args) {
+    try {
+      switch (args.first) {
+        case 'id':
+          connections[connection]!.id = args[1] as String;
+          notifyListeners();
+          break;
+        case 'assets':
+          final assetsVersion = args[1] as String?;
+          if (assetsVersion == config.assetsVersion) {
+            connections[connection]!.hasAssets = true;
+            notifyListeners();
+          } else {
+            pushAssets(connection);
+          }
+          break;
+      }
+    } catch (e) {
+      lastErrors.general = e;
+      notifyListeners();
+    }
+  }
+
   Future<Uint8List>? assetsFetch;
 
   Future<void> pushAssets([Sink<Message>? connection]) async {
@@ -367,26 +394,12 @@ class Server extends ChangeNotifier {
     }
   }
 
-  void _dispatch(Sink<Message> connection, Message args) {
-    try {
-      switch (args.first) {
-        case 'id':
-          connections[connection]!.id = args[1] as String;
-          notifyListeners();
-          break;
-        case 'assets':
-          final assetsVersion = args[1] as String?;
-          if (assetsVersion == config.assetsVersion) {
-            connections[connection]!.hasAssets = true;
-            notifyListeners();
-          } else {
-            pushAssets(connection);
-          }
-          break;
-      }
-    } catch (e) {
-      lastErrors.general = e;
-      notifyListeners();
+  void wakeAll() => _multicast(['wake']);
+  void sleepAll() => _multicast(['sleep']);
+
+  void _multicast(List<dynamic> message) {
+    for (final connection in connections.keys) {
+      connection.add(message);
     }
   }
 }

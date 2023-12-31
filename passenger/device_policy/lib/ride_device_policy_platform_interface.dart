@@ -23,9 +23,10 @@ abstract class RideDevicePolicyPlatform extends PlatformInterface {
     _instance = instance;
   }
 
-  Future<void> setSystemSetting(String setting, String value) =>
-      throw UnimplementedError();
-
-  Future<String?> getSystemSetting(String setting) =>
-      throw UnimplementedError();
+  Future<bool> requestAdminIfNeeded([String? explanation]);
+  Future<void> setSystemSetting(String setting, String? value);
+  Future<String?> getSystemSetting(String setting);
+  Future<void> home();
+  Future<void> wakeUp();
+  Future<void> lockNow();
 }

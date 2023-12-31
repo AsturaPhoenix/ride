@@ -204,9 +204,12 @@ class Client {
     return completer.operation;
   }
 
-  static Future<void> applyDevicePolicy() async {
-    await RideDevicePolicy.setScreenOffTimeout(const Duration(days: 1));
+  static Future<void> wake() async {
+    await RideDevicePolicy.home();
+    await RideDevicePolicy.wakeUp();
   }
+
+  static Future<void> sleep() async => await RideDevicePolicy.lockNow();
 
   final Config config;
   final Sink<Message> _socket;
@@ -217,6 +220,7 @@ class Client {
   final _disconnected = Completer<void>();
   bool get isConnected => !_disconnected.isCompleted;
   Future<void> get disconnected => _disconnected.future;
+  Duration? _oldScreenOffTimeout;
 
   Client({
     required this.config,
@@ -229,35 +233,62 @@ class Client {
     _send(['id', config.id]);
     _send(['assets', config.assetsVersion]);
 
-    applyDevicePolicy();
+    _applyDevicePolicy();
   }
 
-  void close() => _socket.close();
+  void close() {
+    _socket.close();
+    _releaseDevicePolicy();
+  }
+
+  Future<void> _applyDevicePolicy() async {
+    _oldScreenOffTimeout = await RideDevicePolicy.getScreenOffTimeout();
+    await RideDevicePolicy.setScreenOffTimeout(const Duration(days: 1));
+  }
+
+  Future<void> _releaseDevicePolicy() async {
+    await RideDevicePolicy.setScreenOffTimeout(_oldScreenOffTimeout);
+    _oldScreenOffTimeout = null;
+  }
 
   Future<void> _dispatch(Message args) async {
     switch (args.first) {
       case 'id':
-        config.id = args[1] as String;
-        _send(['id', config.id]);
-        break;
-      case 'assets':
-        final assets = args[1] as Uint8List;
-
-        final archive = ZipDecoder().decodeBytes(assets, verify: true);
-        final path = await Config.getAssetsPath();
-        try {
-          await Directory(path).delete(recursive: true);
-        } on PathNotFoundException {
-          // ignore
+        {
+          config.id = args[1] as String;
+          _send(['id', config.id]);
+          break;
         }
-        await extractArchiveToDiskAsync(archive, path);
+      case 'assets':
+        {
+          final assets = args[1] as Uint8List;
 
-        listener?.assetsChanged();
+          final archive = ZipDecoder().decodeBytes(assets, verify: true);
+          final path = await Config.getAssetsPath();
+          try {
+            await Directory(path).delete(recursive: true);
+          } on PathNotFoundException {
+            // ignore
+          }
+          await extractArchiveToDiskAsync(archive, path);
 
-        config.assetsVersion = computeAssetsVersion(assets);
-        _send(['assets', config.assetsVersion]);
+          listener?.assetsChanged();
 
-        break;
+          config.assetsVersion = computeAssetsVersion(assets);
+          _send(['assets', config.assetsVersion]);
+
+          break;
+        }
+      case 'wake':
+        {
+          await wake();
+          break;
+        }
+      case 'sleep':
+        {
+          await sleep();
+          break;
+        }
     }
   }
 

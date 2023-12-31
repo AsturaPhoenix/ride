@@ -37,4 +37,10 @@ class FakeServerManager extends ChangeNotifier implements ServerManager {
     lifecycleState = ServerLifecycleState.stopped;
     notifyListeners();
   }
+
+  @override
+  void wakeAll() {}
+
+  @override
+  void sleepAll() {}
 }
