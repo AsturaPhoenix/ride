@@ -14,7 +14,7 @@ enum RideAppCategory {
   info,
   music(['com.spotify.music']),
   video(['com.netflix.mediaclient', 'com.amazon.youtube_apk']),
-  browser(['com.amazon.cloud9']),
+  browser(['com.android.chrome']),
   other;
 
   static final Map<String, RideAppCategory> _appIndex = {
