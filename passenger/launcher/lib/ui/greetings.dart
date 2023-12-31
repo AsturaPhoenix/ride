@@ -58,7 +58,9 @@ class GreetingsState extends State<Greetings> with TickerProviderStateMixin {
         while (true) {
           for (final slide in slides) {
             final image = slide.imageSource();
-            // ignore: use_build_context_synchronously
+            if (!mounted) {
+              break;
+            }
             await precacheImage(image, context);
 
             yield Slide(

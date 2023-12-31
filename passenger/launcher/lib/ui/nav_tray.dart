@@ -29,22 +29,43 @@ enum RideAppCategory {
   const RideAppCategory([this.apps = const []]);
 }
 
+class DeviceAppsImpl {
+  const DeviceAppsImpl();
+
+  Stream<ApplicationEvent> listenToAppsChanges() =>
+      DeviceApps.listenToAppsChanges();
+  Future<List<Application>> getInstalledApplications({
+    required bool includeAppIcons,
+  }) =>
+      DeviceApps.getInstalledApplications(
+        includeSystemApps: true,
+        includeAppIcons: includeAppIcons,
+        onlyAppsWithLaunchIntent: true,
+      );
+}
+
 class NavTray extends StatefulWidget {
   static const double tileHeight = 64.0;
 
   final bool locked;
+  final DeviceAppsImpl deviceApps;
 
-  const NavTray({super.key, this.locked = true});
+  const NavTray({
+    super.key,
+    this.locked = true,
+    this.deviceApps = const DeviceAppsImpl(),
+  });
 
   @override
   State<StatefulWidget> createState() => NavTrayState();
 }
 
-class NavPageRoute extends MaterialPageRoute {
-  NavPageRoute({required super.builder});
+class NavPageTransitions extends PageTransitionsTheme {
+  const NavPageTransitions();
 
   @override
-  Widget buildTransitions(
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
@@ -130,64 +151,80 @@ class _App extends ChangeNotifier {
 }
 
 class NavTrayState extends State<NavTray> {
+  static const categoryDisplay = {
+    RideAppCategory.info: 'Info',
+    RideAppCategory.music: 'Music',
+    RideAppCategory.video: 'Video',
+    RideAppCategory.browser: 'Browser',
+    RideAppCategory.other: 'Other',
+  };
+
   final navigatorKey = GlobalKey<NavigatorState>();
 
   late Stream<Multimap<RideAppCategory, _App>> _apps;
   final _iconCache = <String, ImageProvider>{};
+  RideAppCategory? selectedCategory;
 
   @override
   void initState() {
     super.initState();
+    _apps = _listenToApps();
+  }
 
-    _apps = () async* {
-      Future<List<Application>> refresh({required bool needsIcons}) =>
-          DeviceApps.getInstalledApplications(
-            includeSystemApps: true,
-            includeAppIcons: needsIcons,
-            onlyAppsWithLaunchIntent: true,
-          );
+  @override
+  void didUpdateWidget(covariant NavTray oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-      yield await refresh(needsIcons: true);
+    if (widget.deviceApps != oldWidget.deviceApps) {
+      _apps = _listenToApps();
+    }
+  }
 
-      await for (final change in DeviceApps.listenToAppsChanges()) {
-        if (const {
-          ApplicationEventType.updated,
-          ApplicationEventType.uninstalled,
-          ApplicationEventType.disabled,
-        }.contains(change.event)) {
-          _iconCache.remove(change.packageName);
-        }
+  Stream<Multimap<RideAppCategory, _App>> _listenToApps() async* {
+    yield await _getCategorizedApps(needsIcons: true);
 
-        yield await refresh(
-          needsIcons: const {
-            ApplicationEventType.installed,
-            ApplicationEventType.updated,
-            ApplicationEventType.enabled,
-          }.contains(change.event),
-        );
+    await for (final change in widget.deviceApps.listenToAppsChanges()) {
+      if (const {
+        ApplicationEventType.updated,
+        ApplicationEventType.uninstalled,
+        ApplicationEventType.disabled,
+      }.contains(change.event)) {
+        _iconCache.remove(change.packageName);
       }
-    }()
-        .asyncMap(
-      (apps) async {
-        final preloads = <Future>[];
-        final result = Multimap.fromIterable(
-          apps,
-          key: (app) =>
-              RideAppCategory.categorizeApp((app as Application).packageName),
-          value: (app) => _App(
-            name: (app as Application).appName,
-            packageName: app.packageName,
-            icon: _iconCache[app.packageName] ??= () {
-              final image = MemoryImage((app as ApplicationWithIcon).icon);
-              preloads.add(precacheImage(image, context));
-              return image;
-            }(),
-          ),
-        );
-        await Future.wait(preloads);
-        return result;
-      },
+
+      yield await _getCategorizedApps(
+        needsIcons: const {
+          ApplicationEventType.installed,
+          ApplicationEventType.updated,
+          ApplicationEventType.enabled,
+        }.contains(change.event),
+      );
+    }
+  }
+
+  Future<Multimap<RideAppCategory, _App>> _getCategorizedApps({
+    required bool needsIcons,
+  }) async {
+    final apps = await widget.deviceApps
+        .getInstalledApplications(includeAppIcons: needsIcons);
+
+    final preloads = <Future>[];
+    final result = Multimap.fromIterable(
+      apps,
+      key: (app) =>
+          RideAppCategory.categorizeApp((app as Application).packageName),
+      value: (app) => _App(
+        name: (app as Application).appName,
+        packageName: app.packageName,
+        icon: _iconCache[app.packageName] ??= () {
+          final image = MemoryImage((app as ApplicationWithIcon).icon);
+          preloads.add(precacheImage(image, context));
+          return image;
+        }(),
+      ),
     );
+    await Future.wait(preloads);
+    return result;
   }
 
   Widget _createRootPage(
@@ -203,36 +240,26 @@ class NavTrayState extends State<NavTray> {
         ),
         padding: const EdgeInsets.all(64),
         childrenDelegate: SliverChildListDelegate.fixed([
-          for (final category in {
-            RideAppCategory.info: 'Info',
-            RideAppCategory.music: 'Music',
-            RideAppCategory.video: 'Video',
-            RideAppCategory.browser: 'Browser',
-            if (!widget.locked) RideAppCategory.other: 'Other',
-          }.entries.map(
-                (entry) => (
-                  type: entry.key,
-                  name: entry.value,
-                  apps: [...apps[entry.key]]
-                ),
-              ))
-            if (category.apps.isNotEmpty)
+          for (final category in categoryDisplay.entries.map(
+            (entry) => (
+              type: entry.key,
+              name: entry.value,
+              apps: apps[entry.key],
+            ),
+          ))
+            if ((category.type != RideAppCategory.other || !widget.locked) &&
+                category.apps.isNotEmpty)
               Hero(
-                tag: category,
+                tag: category.type,
                 child: NavButton(
                   icons: [
                     for (final app in category.apps.take(4))
                       app.buildIcon(context),
                   ],
                   text: category.name,
-                  onPressed: category.apps.length == 1
+                  onPressed: category.apps.skip(1).isEmpty
                       ? category.apps.single.open
-                      : () => Navigator.of(context).push(
-                            NavPageRoute(
-                              builder: (context) =>
-                                  _createCategoryPage(context, category),
-                            ),
-                          ),
+                      : () => setState(() => selectedCategory = category.type),
                 ),
               ),
         ]),
@@ -240,7 +267,8 @@ class NavTrayState extends State<NavTray> {
 
   Widget _createCategoryPage(
     BuildContext context,
-    ({RideAppCategory type, String name, List<_App> apps}) category,
+    RideAppCategory type,
+    List<_App> apps,
   ) =>
       Stack(
         clipBehavior: Clip.none,
@@ -253,9 +281,9 @@ class NavTrayState extends State<NavTray> {
                 mainAxisExtent: NavTray.tileHeight + 24,
               ),
               padding: const EdgeInsets.all(64),
-              itemCount: category.apps.length,
+              itemCount: apps.length,
               itemBuilder: (context, index) {
-                final app = category.apps[index];
+                final app = apps[index];
                 return TextButton(
                   onPressed: app.open,
                   child: ListTile(
@@ -268,7 +296,7 @@ class NavTrayState extends State<NavTray> {
                       alignment: Alignment.centerLeft,
                       child: Text(app.name),
                     ),
-                    subtitle: category.type == RideAppCategory.other
+                    subtitle: type == RideAppCategory.other
                         ? Text(app.packageName, overflow: TextOverflow.ellipsis)
                         : null,
                   ),
@@ -288,12 +316,12 @@ class NavTrayState extends State<NavTray> {
                       child: SizedBox(
                         height: NavTray.tileHeight,
                         child: Hero(
-                          tag: category,
+                          tag: type,
                           child: NavButton(
                             elevation: 2.0,
                             icons: const [Icon(Icons.arrow_back)],
-                            text: category.name,
-                            onPressed: () => Navigator.of(context).pop(),
+                            text: categoryDisplay[type]!,
+                            onPressed: () => Navigator.pop(context),
                           ),
                         ),
                       ),
@@ -314,22 +342,44 @@ class NavTrayState extends State<NavTray> {
           child: Material(
             elevation: 1.0,
             color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
-            child: StreamBuilder(
-              stream: _apps,
-              builder: (context, apps) => apps.hasData
-                  ? NavigatorPopHandler(
-                      onPop: () => navigatorKey.currentState!.maybePop(),
-                      child: Navigator(
-                        key: navigatorKey,
-                        clipBehavior: Clip.none,
-                        observers: [HeroController()],
-                        onGenerateRoute: (settings) => NavPageRoute(
-                          builder: (context) =>
-                              _createRootPage(context, apps.data!),
+            child: Theme(
+              data: Theme.of(context)
+                  .copyWith(pageTransitionsTheme: const NavPageTransitions()),
+              child: StreamBuilder(
+                stream: _apps,
+                builder: (context, apps) => apps.hasData
+                    ? NavigatorPopHandler(
+                        onPop: () => navigatorKey.currentState!.maybePop(),
+                        child: Navigator(
+                          key: navigatorKey,
+                          clipBehavior: Clip.none,
+                          observers: [HeroController()],
+                          pages: [
+                            MaterialPage(
+                              child: _createRootPage(context, apps.data!),
+                            ),
+                            if (selectedCategory != null)
+                              MaterialPage(
+                                child: Builder(
+                                  builder: (context) => _createCategoryPage(
+                                    context,
+                                    selectedCategory!,
+                                    [...apps.data![selectedCategory]],
+                                  ),
+                                ),
+                              ),
+                          ],
+                          onPopPage: (route, _) {
+                            if (route.didPop(null) &&
+                                selectedCategory != null) {
+                              setState(() => selectedCategory = null);
+                            }
+                            return false;
+                          },
                         ),
-                      ),
-                    )
-                  : const LinearProgressIndicator(),
+                      )
+                    : const LinearProgressIndicator(),
+              ),
             ),
           ),
         ),
