@@ -204,12 +204,8 @@ class Client {
     return completer.operation;
   }
 
-  static Future<void> wake() async {
-    await RideDevicePolicy.home();
-    await RideDevicePolicy.wakeUp();
-  }
-
-  static Future<void> sleep() async => await RideDevicePolicy.lockNow();
+  static Future<void> wake() => RideDevicePolicy.wakeUp();
+  static Future<void> sleep() => RideDevicePolicy.lockNow();
 
   final Config config;
   final Sink<Message> _socket;
