@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
-import 'package:screen_state/screen_state.dart';
 
 import 'core/client.dart';
 import 'ui/greetings.dart';
@@ -8,6 +7,11 @@ import 'ui/nav_tray.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // This translates into about 50 MiB of graphics memory, or 90 MiB total,
+  // which is a lot friendlier than the default, where it can grow to 130/200+,
+  // which puts observable pressure on other apps.
+  imageCache.maximumSizeBytes = 20 << 20;
 
   runApp(
     RideLauncher(

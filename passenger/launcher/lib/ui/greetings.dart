@@ -61,7 +61,6 @@ class GreetingsState extends State<Greetings> with TickerProviderStateMixin {
             if (!mounted) {
               break;
             }
-            await precacheImage(image, context);
 
             yield Slide(
               key: UniqueKey(),

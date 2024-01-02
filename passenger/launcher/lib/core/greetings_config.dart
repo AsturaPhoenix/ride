@@ -21,6 +21,11 @@ Future<List<Slide>> load(Random random, [String? directory]) async {
 
   final Map<String?, Future<ImageSource>> imageSources = {};
 
+  // A caution that these image sources are subject to closure context
+  // overcapture, https://github.com/dart-lang/sdk/issues/36983
+  // Notably since we're also decoding yaml here, we end up retaining the yaml
+  // parse, which is unfortunate (but not enough so to warrant factoring out a
+  // dedicated class for image sources.
   Future<ImageSource> directoryImageSource(Directory directory) async {
     final ls = await directory.list().toList();
     final cycler = RandomCycler(random, ls.length);

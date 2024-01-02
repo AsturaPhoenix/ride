@@ -204,28 +204,23 @@ class NavTrayState extends State<NavTray> {
 
   Future<Multimap<RideAppCategory, _App>> _getCategorizedApps({
     required bool needsIcons,
-  }) async {
-    final apps = await widget.deviceApps
-        .getInstalledApplications(includeAppIcons: needsIcons);
-
-    final preloads = <Future>[];
-    final result = Multimap.fromIterable(
-      apps,
-      key: (app) =>
-          RideAppCategory.categorizeApp((app as Application).packageName),
-      value: (app) => _App(
-        name: (app as Application).appName,
-        packageName: app.packageName,
-        icon: _iconCache[app.packageName] ??= () {
-          final image = MemoryImage((app as ApplicationWithIcon).icon);
-          preloads.add(precacheImage(image, context));
-          return image;
-        }(),
-      ),
-    );
-    await Future.wait(preloads);
-    return result;
-  }
+  }) =>
+      widget.deviceApps
+          .getInstalledApplications(includeAppIcons: needsIcons)
+          .then(
+            (apps) => Multimap.fromIterable(
+              apps,
+              key: (app) => RideAppCategory.categorizeApp(
+                (app as Application).packageName,
+              ),
+              value: (app) => _App(
+                name: (app as Application).appName,
+                packageName: app.packageName,
+                icon: _iconCache[app.packageName] ??=
+                    MemoryImage((app as ApplicationWithIcon).icon),
+              ),
+            ),
+          );
 
   Widget _createRootPage(
     BuildContext context,
