@@ -114,11 +114,21 @@ class _App extends ChangeNotifier {
           switchInCurve: const Interval(0.5, 1.0),
           // A switch-out interval of 0,.5 would be a pure delay, but keeping it
           // linear is an interesting visual.
-          child: isLaunching
-              ? const CircularProgressIndicator()
-              : Image(key: UniqueKey(), image: icon),
+          child: isLaunching ? const CircularProgressIndicator() : child,
+        ),
+        child: Image(
           // Unclear why at least one of these children needs a key to force the
           // animation, since they're different types.
+          key: UniqueKey(),
+          image: icon,
+          frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+              wasSynchronouslyLoaded
+                  ? child
+                  : AnimatedOpacity(
+                      opacity: frame == null ? 0 : 1,
+                      duration: const Duration(milliseconds: 100),
+                      child: child,
+                    ),
         ),
       );
 
