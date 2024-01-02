@@ -25,3 +25,5 @@ Similarly, the status bar management APIs are unavailable in API level 22. Lock 
 ```shell
 adb shell settings put global device_provisioned 0
 ```
+
+However, this may not be 100% reliable, particularly immediately after a reboot.
