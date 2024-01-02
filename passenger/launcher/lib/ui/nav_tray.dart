@@ -383,7 +383,11 @@ class NavTrayState extends State<NavTray> {
                           },
                         ),
                       )
-                    : const LinearProgressIndicator(),
+                    : const UnconstrainedBox(
+                        alignment: Alignment.topCenter,
+                        constrainedAxis: Axis.horizontal,
+                        child: LinearProgressIndicator(),
+                      ),
               ),
             ),
           ),
