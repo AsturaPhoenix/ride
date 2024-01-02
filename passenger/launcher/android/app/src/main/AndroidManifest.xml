@@ -1,9 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.baku.ride_launcher">
+    package="io.baku.ride_launcher"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- This library declares a min SDK version of 23 but doesn't actually need it. -->
+    <uses-sdk tools:overrideLibrary="dk.cachet.screen_state" />
     <application
         android:label="RIDE Launcher"
         android:name="${applicationName}"

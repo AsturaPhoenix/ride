@@ -1,18 +1,25 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'ride_device_policy_platform_interface.dart';
 
 /// An implementation of [RideDevicePolicyPlatform] that uses method channels.
 class MethodChannelRideDevicePolicy extends RideDevicePolicyPlatform {
-  /// The method channel used to interact with the native platform.
-  @visibleForTesting
-  final methodChannel = const MethodChannel('ride_device_policy');
+  static const methodChannel = MethodChannel('ride_device_policy');
+  static const windowEventChannel =
+      EventChannel('ride_device_policy.windowEvents');
+
+  @override
+  late final Stream<String> windowEvents =
+      windowEventChannel.receiveBroadcastStream().cast();
 
   @override
   Future<bool> requestAdminIfNeeded([String? explanation]) async =>
       await methodChannel.invokeMethod('requestAdminIfNeeded', explanation)
           as bool;
+
+  @override
+  Future<bool> requestAccessibilityIfNeeded() async =>
+      await methodChannel.invokeMethod('requestAccessibilityIfNeeded') as bool;
   @override
   Future<void> setSystemSetting(String setting, String? value) =>
       methodChannel.invokeMethod('setSystemSetting', [setting, value]);

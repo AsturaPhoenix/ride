@@ -49,6 +49,7 @@ dependencies:
     path: ../device_policy
   ride_shared:
     path: ../../shared
+  screen_state: ^3.0.1
   shared_preferences: ^2.2.2
   uuid: ^4.3.1
   yaml: ^3.1.2

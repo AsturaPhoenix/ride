@@ -10,6 +10,7 @@ import 'package:network_info_plus/network_info_plus.dart';
 import 'package:retry/retry.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
 import 'package:ride_shared/protocol.dart';
+import 'package:screen_state/screen_state.dart';
 
 import 'config.dart';
 
@@ -204,9 +205,6 @@ class Client {
     return completer.operation;
   }
 
-  static Future<void> wake() => RideDevicePolicy.wakeUp();
-  static Future<void> sleep() => RideDevicePolicy.lockNow();
-
   final Config config;
   final Sink<Message> _socket;
   ClientListener? listener;
@@ -217,6 +215,8 @@ class Client {
   bool get isConnected => !_disconnected.isCompleted;
   Future<void> get disconnected => _disconnected.future;
   Duration? _oldScreenOffTimeout;
+
+  late final StreamSubscription _windowEventSubscription, _screenSubscription;
 
   Client({
     required this.config,
@@ -230,9 +230,27 @@ class Client {
     _send(['assets', config.assetsVersion]);
 
     _applyDevicePolicy();
+
+    _windowEventSubscription = RideDevicePolicy.windowEvents
+        .listen((event) => _send(['window', event]));
+    _screenSubscription = Screen().screenStateStream!.listen(
+      (event) {
+        switch (event) {
+          case ScreenStateEvent.SCREEN_ON:
+            _send(['screen', true]);
+            break;
+          case ScreenStateEvent.SCREEN_OFF:
+            _send(['screen', false]);
+            break;
+          default:
+        }
+      },
+    );
   }
 
   void close() {
+    _windowEventSubscription.cancel();
+    _screenSubscription.cancel();
     _socket.close();
     _releaseDevicePolicy();
   }
@@ -277,12 +295,18 @@ class Client {
         }
       case 'wake':
         {
-          await wake();
+          await RideDevicePolicy.wakeUp();
+          break;
+        }
+      case 'home':
+        {
+          await RideDevicePolicy.home();
+          await RideDevicePolicy.wakeUp();
           break;
         }
       case 'sleep':
         {
-          await sleep();
+          await RideDevicePolicy.lockNow();
           break;
         }
     }

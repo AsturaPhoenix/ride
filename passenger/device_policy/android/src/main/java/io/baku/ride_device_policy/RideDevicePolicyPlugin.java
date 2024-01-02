@@ -13,10 +13,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.plugin.common.EventChannel;
+import io.flutter.plugin.common.EventChannel.StreamHandler;
+import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
@@ -27,26 +31,25 @@ import io.flutter.plugin.common.PluginRegistry;
  * RideDevicePolicyPlugin
  */
 public class RideDevicePolicyPlugin extends DeviceAdminReceiver
-    implements FlutterPlugin, MethodCallHandler, ActivityAware, PluginRegistry.ActivityResultListener {
-  private static final int REQUEST_CODE_ENABLE_ADMIN = 0;
+    implements FlutterPlugin, MethodCallHandler, StreamHandler, ActivityAware, PluginRegistry.ActivityResultListener {
+  private static final int REQUEST_CODE_ENABLE_ADMIN = 0, REQUEST_CODE_ENABLE_ACCESSIBILITY = 1;
 
-  /// The MethodChannel that will the communication between Flutter and native Android
-  ///
-  /// This local reference serves to register the plugin with the Flutter Engine and unregister it
-  /// when the Flutter Engine is detached from the Activity
   private MethodChannel channel;
+  private EventChannel windowEvents;
   private Context context;
   private ComponentName componentName;
   private DevicePolicyManager devicePolicyManager;
   private ActivityPluginBinding activityBinding;
 
-  private Result adminRequest;
+  private Result activityResult;
   private PowerManager.WakeLock wakeLock;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
     channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "ride_device_policy");
     channel.setMethodCallHandler(this);
+    windowEvents = new EventChannel(flutterPluginBinding.getBinaryMessenger(), "ride_device_policy.windowEvents");
+    windowEvents.setStreamHandler(this);
 
     context = flutterPluginBinding.getApplicationContext();
 
@@ -65,9 +68,10 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
 
   @Override
   public void onDetachedFromActivity() {
-    if (adminRequest != null) {
-      adminRequest.error("failed", "Activity detached.", null);
-      adminRequest = null;
+    if (activityResult != null) {
+      activityResult.error("failed", "Activity detached.", null);
+      System.out.println("detached");
+      activityResult = null;
     }
 
     activityBinding.removeActivityResultListener(this);
@@ -88,22 +92,39 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
   public boolean onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
     switch (requestCode) {
       case REQUEST_CODE_ENABLE_ADMIN:
+      case REQUEST_CODE_ENABLE_ACCESSIBILITY:
         switch (resultCode) {
           case Activity.RESULT_OK:
-            adminRequest.success(true);
+            activityResult.success(true);
             break;
           case Activity.RESULT_CANCELED:
-            adminRequest.success(false);
+            activityResult.success(false);
             break;
           default:
-            adminRequest.error(Integer.toString(resultCode), "Exceptional result from admin request.", data.toString());
+            activityResult.error(Integer.toString(resultCode), "Exceptional activity result.", data.toString());
             break;
         }
-        adminRequest = null;
+        activityResult = null;
         return true;
       default:
         return false;
     }
+  }
+
+  private boolean isAccessibilityActive() {
+    final int accessibilityEnabled;
+    try {
+      accessibilityEnabled = Settings.Secure.getInt(context.getContentResolver(), android.provider.Settings.Secure.ACCESSIBILITY_ENABLED);
+    } catch (Settings.SettingNotFoundException e) {
+      return false;
+    }
+
+    if (accessibilityEnabled == 1) {
+      final String service = context.getPackageName() + "/" + RideAccessibilityService.class.getCanonicalName();
+      final String accessibilityServices = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+      return accessibilityServices != null && Pattern.matches("(?:^|:)" + service + "(?:$|:)", accessibilityServices);
+    }
+    return false;
   }
 
   @Override
@@ -120,10 +141,10 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
           return;
         }
 
-        if (adminRequest != null) {
-          throw new IllegalStateException("Unexpected uncompleted admin request.");
+        if (activityResult != null) {
+          throw new IllegalStateException("Unexpected uncompleted activity result.");
         }
-        adminRequest = result;
+        activityResult = result;
 
         final Intent intent = new Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN);
         intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, componentName);
@@ -133,6 +154,28 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
         }
         activityBinding.getActivity().startActivityForResult(intent, REQUEST_CODE_ENABLE_ADMIN);
         // Result will be completed in callback.
+        break;
+      }
+      case "requestAccessibilityIfNeeded": {
+        if (isAccessibilityActive()) {
+          result.success(true);
+          return;
+        }
+
+        if (activityBinding == null) {
+          result.error("failed", "Result callback requires an activity.", null);
+          return;
+        }
+
+        if (activityResult != null) {
+          throw new IllegalStateException("Unexpected uncompleted activity result.");
+        }
+        // TODO: This actually won't get us what we want, since the UI is a toggle switch on the settings menu.
+        // Instead, we probably want to do something when the service starts.
+        activityResult = result;
+
+        final Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        activityBinding.getActivity().startActivityForResult(intent, REQUEST_CODE_ENABLE_ACCESSIBILITY);
         break;
       }
       case "setSystemSetting": {
@@ -177,7 +220,18 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
   }
 
   @Override
+  public void onListen(Object arguments, EventSink events) {
+    RideAccessibilityService.eventSink = events;
+  }
+
+  @Override
+  public void onCancel(Object arguments) {
+    RideAccessibilityService.eventSink = null;
+  }
+
+  @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
     channel.setMethodCallHandler(null);
+    windowEvents.setStreamHandler(null);
   }
 }

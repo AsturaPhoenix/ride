@@ -161,8 +161,15 @@ class ServerManager extends ChangeNotifier {
   }
 
   void pushAssets() => FlutterBackgroundService().invoke('pushAssets');
-  void wakeAll() => FlutterBackgroundService().invoke('wakeAll');
-  void sleepAll() => FlutterBackgroundService().invoke('sleepAll');
+  void wake([List<String>? ids]) => _send(['wake'], ids);
+  void home([List<String>? ids]) => _send(['home'], ids);
+  void sleep([List<String>? ids]) => _send(['sleep'], ids);
+
+  void _send(Message message, List<String>? ids) =>
+      FlutterBackgroundService().invoke('send', {
+        'message': message,
+        'ids': ids,
+      });
 }
 
 class ServerErrors {
@@ -180,12 +187,20 @@ class ServerErrors {
       };
 }
 
+class DeviceState {
+  bool hasAssets;
+  String? foregroundPackage;
+  bool? screenOn;
+
+  DeviceState({required this.hasAssets, this.foregroundPackage, this.screenOn});
+}
+
 class ServerState {
   static ServerState? fromNullableJson(Map<String, dynamic>? map) =>
       map == null ? null : ServerState.fromJson(map);
 
   final int port;
-  final Map<String, ({bool hasAssets})> connections;
+  final Map<String, DeviceState> connections;
   final ServerErrors lastErrors;
 
   const ServerState({
@@ -200,7 +215,11 @@ class ServerState {
           connections: {
             for (final MapEntry(key: id, value: connection)
                 in (map['connections'] as Map).entries)
-              id as String: (hasAssets: connection['hasAssets'] as bool),
+              id as String: DeviceState(
+                hasAssets: connection['hasAssets'] as bool,
+                foregroundPackage: connection['foregroundPackage'] as String?,
+                screenOn: connection['screenOn'] as bool?,
+              ),
           },
           lastErrors:
               ServerErrors.fromJson(map['lastErrors'] as Map<String, dynamic>),
@@ -214,6 +233,8 @@ class ServerState {
               in connections.entries)
             id: {
               'hasAssets': connection.hasAssets,
+              'foregroundPackage': connection.foregroundPackage,
+              'screenOn': connection.screenOn,
             },
         },
         'lastErrors': lastErrors.toJson(),
@@ -223,8 +244,15 @@ class ServerState {
 class ServerConnectionInfo {
   bool hasAssets;
   String id;
+  String? foregroundPackage;
+  bool? screenOn;
 
-  ServerConnectionInfo({required this.hasAssets, required this.id});
+  ServerConnectionInfo({
+    required this.hasAssets,
+    required this.id,
+    this.foregroundPackage,
+    this.screenOn,
+  });
 }
 
 Future<Uint8List> fetchResource(String resource) async {
@@ -259,7 +287,11 @@ class Server extends ChangeNotifier {
             port: server.serverSocket.port,
             connections: {
               for (final connection in server.connections.values)
-                connection.id: (hasAssets: connection.hasAssets),
+                connection.id: DeviceState(
+                  hasAssets: connection.hasAssets,
+                  foregroundPackage: connection.foregroundPackage,
+                  screenOn: connection.screenOn,
+                ),
             },
             lastErrors: server.lastErrors,
           ).toJson(),
@@ -273,8 +305,12 @@ class Server extends ChangeNotifier {
       final subscriptions = [
         service.on('syncState').listen((_) => syncState()),
         service.on('pushAssets').listen((_) => server.pushAssets()),
-        service.on('wakeAll').listen((_) => server.wakeAll()),
-        service.on('sleepAll').listen((_) => server.sleepAll()),
+        service.on('send').listen(
+              (args) => server.send(
+                args!['message'] as Message,
+                args['ids'] as Iterable<String>?,
+              ),
+            ),
       ];
       await service.on('stop').first;
 
@@ -344,6 +380,14 @@ class Server extends ChangeNotifier {
             pushAssets(connection);
           }
           break;
+        case 'window':
+          connections[connection]!.foregroundPackage = args[1] as String;
+          notifyListeners();
+          break;
+        case 'screen':
+          connections[connection]!.screenOn = args[1] as bool;
+          notifyListeners();
+          break;
       }
     } catch (e) {
       lastErrors.general = e;
@@ -394,11 +438,15 @@ class Server extends ChangeNotifier {
     }
   }
 
-  void wakeAll() => _multicast(['wake']);
-  void sleepAll() => _multicast(['sleep']);
+  List<Sink<Message>> findConnections(Set<String> ids) => [
+        for (final MapEntry(key: connection, value: ServerConnectionInfo(:id))
+            in connections.entries)
+          if (ids.contains(id)) connection,
+      ];
 
-  void _multicast(List<dynamic> message) {
-    for (final connection in connections.keys) {
+  void send(Message message, [Iterable<String>? ids]) {
+    for (final connection
+        in ids == null ? connections.keys : findConnections({...ids})) {
       connection.add(message);
     }
   }

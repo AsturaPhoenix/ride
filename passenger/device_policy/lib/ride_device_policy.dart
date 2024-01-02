@@ -12,8 +12,14 @@ class RideDevicePolicy {
   static T? _mapNonNull<T>(String? value, T Function(String) map) =>
       value == null ? null : map(value);
 
+  static Stream<String> get windowEvents =>
+      RideDevicePolicyPlatform.instance.windowEvents;
+
   static Future<bool> requestAdminIfNeeded([String? explanation]) =>
       RideDevicePolicyPlatform.instance.requestAdminIfNeeded(explanation);
+
+  static Future<bool> requestAccessibilityIfNeeded() =>
+      RideDevicePolicyPlatform.instance.requestAccessibilityIfNeeded();
 
   static Future<void> setScreenBrightness(int? brightness) =>
       RideDevicePolicyPlatform.instance.setSystemSetting(

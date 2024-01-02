@@ -23,7 +23,10 @@ abstract class RideDevicePolicyPlatform extends PlatformInterface {
     _instance = instance;
   }
 
+  Stream<String> get windowEvents;
+
   Future<bool> requestAdminIfNeeded([String? explanation]);
+  Future<bool> requestAccessibilityIfNeeded();
   Future<void> setSystemSetting(String setting, String? value);
   Future<String?> getSystemSetting(String setting);
   Future<void> home();

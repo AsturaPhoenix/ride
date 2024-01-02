@@ -22,9 +22,21 @@ class FakeServerManager extends ChangeNotifier implements ServerManager {
     serverState = ServerState(
       port: defaults.serverPort,
       connections: {
-        'FR': (hasAssets: true),
-        'RL': (hasAssets: true),
-        'RR': (hasAssets: true),
+        'FR': DeviceState(
+          hasAssets: true,
+          foregroundPackage: null,
+          screenOn: null,
+        ),
+        'RL': DeviceState(
+          hasAssets: true,
+          foregroundPackage: 'io.baku.ride_launcher',
+          screenOn: false,
+        ),
+        'RR': DeviceState(
+          hasAssets: true,
+          foregroundPackage: 'com.spotify.music',
+          screenOn: true,
+        ),
       },
       lastErrors: ServerErrors(),
     );
@@ -38,9 +50,27 @@ class FakeServerManager extends ChangeNotifier implements ServerManager {
     notifyListeners();
   }
 
-  @override
-  void wakeAll() {}
+  void _apply(List<String>? ids, void Function(DeviceState) operation) {
+    if (serverState == null) return;
+
+    for (final deviceState in ids == null
+        ? serverState!.connections.values
+        : ids.map((id) => serverState!.connections[id]!)) {
+      operation(deviceState);
+    }
+
+    notifyListeners();
+  }
 
   @override
-  void sleepAll() {}
+  void wake([List<String>? ids]) => _apply(ids, (d) => d.screenOn = true);
+
+  @override
+  void home([List<String>? ids]) => _apply(ids, (d) {
+        d.foregroundPackage = 'io.baku.ride_launcher';
+        d.screenOn = true;
+      });
+
+  @override
+  void sleep([List<String>? ids]) => _apply(ids, (d) => d.screenOn = false);
 }
