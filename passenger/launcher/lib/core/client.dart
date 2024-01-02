@@ -224,6 +224,8 @@ class Client {
     this.onAssetsReceived,
     this.listener,
   }) : _socket = encoder.startChunkedConversion(socket) {
+    socket.setOption(SocketOption.tcpNoDelay, true);
+
     socket.transform(decoder).listen(_dispatch, onDone: _disconnected.complete);
 
     _send(['id', config.id]);

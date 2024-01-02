@@ -337,6 +337,8 @@ class Server extends ChangeNotifier {
 
     serverSocket.listen(
       (socket) async {
+        socket.setOption(SocketOption.tcpNoDelay, true);
+
         // ignore: close_sinks
         final sink = encoder.startChunkedConversion(socket);
         connections[sink] = ServerConnectionInfo(
