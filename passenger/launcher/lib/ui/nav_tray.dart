@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:defer_pointer/defer_pointer.dart';
 import 'package:device_apps/device_apps.dart';
@@ -273,8 +274,9 @@ class NavTrayState extends State<NavTray> {
   Widget _createCategoryPage(
     BuildContext context,
     RideAppCategory type,
-    List<_App> apps,
-  ) =>
+    List<_App> apps, {
+    List<Widget> extraChildren = const [],
+  }) =>
       Stack(
         clipBehavior: Clip.none,
         children: [
@@ -286,26 +288,33 @@ class NavTrayState extends State<NavTray> {
                 mainAxisExtent: NavTray.tileHeight + 24,
               ),
               padding: const EdgeInsets.all(64),
-              itemCount: apps.length,
+              itemCount: apps.length + extraChildren.length,
               itemBuilder: (context, index) {
-                final app = apps[index];
-                return TextButton(
-                  onPressed: app.open,
-                  child: ListTile(
-                    leading: AspectRatio(
-                      aspectRatio: 1.0,
-                      child: app.buildIcon(context),
+                if (index < apps.length) {
+                  final app = apps[index];
+                  return TextButton(
+                    onPressed: app.open,
+                    child: ListTile(
+                      leading: AspectRatio(
+                        aspectRatio: 1.0,
+                        child: app.buildIcon(context),
+                      ),
+                      title: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(app.name),
+                      ),
+                      subtitle: type == RideAppCategory.other
+                          ? Text(
+                              app.packageName,
+                              overflow: TextOverflow.ellipsis,
+                            )
+                          : null,
                     ),
-                    title: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(app.name),
-                    ),
-                    subtitle: type == RideAppCategory.other
-                        ? Text(app.packageName, overflow: TextOverflow.ellipsis)
-                        : null,
-                  ),
-                );
+                  );
+                } else {
+                  return extraChildren[index - apps.length];
+                }
               },
             ),
           ),
@@ -370,6 +379,10 @@ class NavTrayState extends State<NavTray> {
                                     context,
                                     selectedCategory!,
                                     [...apps.data![selectedCategory]],
+                                    extraChildren: selectedCategory ==
+                                            RideAppCategory.other
+                                        ? const [ProvisionToggle()]
+                                        : const [],
                                   ),
                                 ),
                               ),
@@ -445,5 +458,104 @@ class NavButton extends StatelessWidget {
             child: Text(text),
           ),
         ),
+      );
+}
+
+/// It's very difficult to disable the lock screen and status bar on these
+/// devices. One of the more surefire ways is by setting `device_provisioned` to
+/// `'0'`, but that also disables developer options and eventually we lose ADB
+/// access and need to factory reset.
+class ProvisionToggle extends StatefulWidget {
+  const ProvisionToggle({super.key});
+
+  @override
+  ProvisionToggleState createState() => ProvisionToggleState();
+}
+
+class ProvisionToggleState extends State<ProvisionToggle> {
+  static Future<String> run(
+    String executable, [
+    List<String> arguments = const [],
+  ]) async {
+    final result = await Process.run(executable, arguments);
+    final stderr = result.stderr as String;
+    if (stderr.isNotEmpty) throw stderr;
+    if (result.exitCode != 0) throw result.exitCode;
+    return result.stdout as String;
+  }
+
+  static Future<String> getProvisioned() => run('su', const [
+        '-c',
+        'settings',
+        'get',
+        'global',
+        'device_provisioned',
+      ]);
+
+  static Future<void> putProvisioned(String value) => run('su', [
+        '-c',
+        'settings',
+        'put',
+        'global',
+        'device_provisioned',
+        value,
+      ]);
+
+  late Future<String> provisioned;
+
+  @override
+  void initState() {
+    super.initState();
+
+    provisioned = getProvisioned();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder(
+        future: provisioned,
+        builder: (context, snapshot) {
+          final provisioned = snapshot.data?.trim();
+
+          return TextButton(
+            onPressed: () => setState(() {
+              this.provisioned = () async {
+                if (provisioned == '1') {
+                  await putProvisioned('0');
+                  // We need to reboot to get the lock screen to vanish.
+                  await run('su', const ['-c', 'reboot']);
+                } else {
+                  await putProvisioned('1');
+                }
+                return getProvisioned();
+              }();
+            }),
+            child: ListTile(
+              leading: Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: AspectRatio(
+                  aspectRatio: 1.0,
+                  child: CircleAvatar(
+                    backgroundColor: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: snapshot.connectionState != ConnectionState.done
+                          ? const CircularProgressIndicator()
+                          : snapshot.hasData
+                              ? Text(
+                                  provisioned!,
+                                  style: const TextStyle(color: Colors.black),
+                                )
+                              : Tooltip(
+                                  message: snapshot.error?.toString(),
+                                  child: const Icon(Icons.error),
+                                ),
+                    ),
+                  ),
+                ),
+              ),
+              title: const Text('Toggle provisioned'),
+            ),
+          );
+        },
       );
 }

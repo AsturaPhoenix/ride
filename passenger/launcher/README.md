@@ -4,9 +4,15 @@ Passenger UI for the Rideshare In-Drive Experience.
 
 ## Provisioning
 
+To disable the keyguard/lockscreen and status bar, we need to toggle `device_provisioned` to `'0'`. However, this can also disable developer options and eventually lock us out of ADB. A 'Toggle provisioned' button is provided in the nav tray while the device is not connected to the server.
+
+Immediately after a reboot, the status bar may show some nonfunctional UI. After dismissing it, it will show a more minimal UI.
+
+The base API level is 22.
+
 ### Keyguard
 
-Fire tablets are particularly resistant to disabling the keyguard. To disable the lockscreen:
+The keyguard should be disabled after reboot when `device_provisioned` is `'0'`. One thing we tried earlier was:
 
 ```shell
 adb shell su -c sqlite3 /data/system/locksettings.db
@@ -14,16 +20,12 @@ UPDATE locksettings SET value = '1' WHERE name = 'lockscreen.disabled';
 adb reboot
 ```
 
-The base API level is 22. Things that didn't work:
+However, this did not work after a second factory reset.
+
+Other things that didn't work:
 * `KeyguardManager`: permission denied even if in manifest.
 * `LayoutParams`: ignored.
 
 ### Status bar
 
-Similarly, the status bar management APIs are unavailable in API level 22. Lock tasks are a very soft lock, and setting lock-task packages fails even with `device_owner.xml`. Luckily, we can disable the harmful bits of the status bar with
-
-```shell
-adb shell settings put global device_provisioned 0
-```
-
-However, this may not be 100% reliable, particularly immediately after a reboot.
+Similarly, the status bar management APIs are unavailable in API level 22. Lock tasks are a very soft lock, and setting lock-task packages fails even with `device_owner.xml`.
