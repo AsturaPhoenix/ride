@@ -10,6 +10,11 @@ Immediately after a reboot, the status bar may show some nonfunctional UI. After
 
 The base API level is 22.
 
+### Misc. tasks
+
+* Enable Chrome lite mode.
+* Ensure Chrome is the default browser (e.g. navigate to Netflix help and always open in Chrome).
+
 ### Keyguard
 
 The keyguard should be disabled after reboot when `device_provisioned` is `'0'`. One thing we tried earlier was:
