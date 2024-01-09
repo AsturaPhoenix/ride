@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:ride_launcher/main.dart';
+import 'package:ride_launcher/ui/launcher.dart';
 
 void main() {
   testWidgets('smoke test', (WidgetTester tester) async {

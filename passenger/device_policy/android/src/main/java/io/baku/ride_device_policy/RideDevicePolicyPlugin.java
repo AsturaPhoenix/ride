@@ -70,7 +70,6 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
   public void onDetachedFromActivity() {
     if (activityResult != null) {
       activityResult.error("failed", "Activity detached.", null);
-      System.out.println("detached");
       activityResult = null;
     }
 

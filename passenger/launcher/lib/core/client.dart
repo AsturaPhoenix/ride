@@ -7,11 +7,13 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:overlay_window/overlay_window.dart';
 import 'package:retry/retry.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
 import 'package:ride_shared/protocol.dart';
 import 'package:screen_state/screen_state.dart';
 
+import '../ui/overlay.dart';
 import 'config.dart';
 
 enum ClientStatus { disconnected, connecting, connected }
@@ -80,7 +82,6 @@ class ClientManager extends ChangeNotifier {
 
   @override
   void dispose() {
-    stop();
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
@@ -170,10 +171,20 @@ class Client {
         }
       });
 
+      final overlay = OverlayWindow.create(
+        RideOverlay.main,
+        const WindowParams(
+          gravity: Gravity.bottom,
+          height: 128,
+        ),
+      );
+
       await service.on('stop').first;
 
       await subscription.cancel();
       await connectionTask?.cancel();
+
+      await (await overlay).destroy();
     } finally {
       await service.stopSelf();
     }
