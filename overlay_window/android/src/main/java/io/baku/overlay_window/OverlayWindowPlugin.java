@@ -1,29 +1,21 @@
 package io.baku.overlay_window;
 
-import static android.view.WindowManager.LayoutParams.*;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
 
-import android.app.Activity;
-import android.app.admin.DeviceAdminReceiver;
-import android.app.admin.DevicePolicyManager;
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.PixelFormat;
-import android.os.PowerManager;
-import android.provider.Settings;
-import android.view.Gravity;
-import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 import io.flutter.FlutterInjector;
 import io.flutter.embedding.android.FlutterActivity;
@@ -34,17 +26,13 @@ import io.flutter.embedding.engine.dart.DartExecutor;
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
+import io.flutter.embedding.engine.plugins.lifecycle.FlutterLifecycleAdapter;
 import io.flutter.embedding.engine.plugins.service.ServiceAware;
 import io.flutter.embedding.engine.plugins.service.ServicePluginBinding;
-import io.flutter.plugin.common.EventChannel;
-import io.flutter.plugin.common.EventChannel.StreamHandler;
-import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
-import io.flutter.plugin.common.PluginRegistry;
-import io.flutter.embedding.engine.plugins.lifecycle.FlutterLifecycleAdapter;
 
 /**
  * OverlayWindowPlugin
@@ -57,6 +45,24 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
     public Window(FlutterView view, FlutterEngine engine) {
       this.view = view;
       this.engine = engine;
+    }
+  }
+
+  private static void applyParams(LayoutParams params, List<Number> serializedParams) {
+    if (serializedParams.get(0) != null) {
+      params.gravity = serializedParams.get(0).intValue();
+    }
+    if (serializedParams.get(1) != null) {
+      params.x = serializedParams.get(1).intValue();
+    }
+    if (serializedParams.get(2) != null) {
+      params.y = serializedParams.get(2).intValue();
+    }
+    if (serializedParams.get(3) != null) {
+      params.width = serializedParams.get(3).intValue();
+    }
+    if (serializedParams.get(4) != null) {
+      params.height = serializedParams.get(4).intValue();
     }
   }
 
@@ -89,26 +95,25 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
         final List<Number> arguments = call.arguments();
         final long entrypoint = arguments.get(0).longValue();
         final LayoutParams params = new LayoutParams(
-            arguments.get(4).intValue(),
-            arguments.get(5).intValue(),
             TYPE_SYSTEM_ALERT,
             FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
         );
-        params.gravity = arguments.get(1).intValue();
-        params.x = arguments.get(2).intValue();
-        params.y = arguments.get(3).intValue();
+        applyParams(params, arguments.subList(1, 6));
 
         final Window window = new Window(
             new FlutterView(context, new FlutterSurfaceView(context, true)),
             new FlutterEngine(context));
+
+        int handle = nextHandle++;
+        windows.put(handle, window);
 
         window.engine.getDartExecutor().executeDartEntrypoint(
             new DartExecutor.DartEntrypoint(
                 FlutterInjector.instance().flutterLoader().findAppBundlePath(),
                 "package:overlay_window/overlay_window_method_channel.dart",
                 "overlayMain"),
-            Arrays.asList(Long.toString(entrypoint)));
+            Arrays.asList(Long.toString(entrypoint), Integer.toString(handle)));
         if (serviceBinding != null) {
           attachToService(window.engine);
         }
@@ -120,10 +125,24 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
         windowManager.addView(window.view, params);
         window.engine.getLifecycleChannel().appIsResumed();
 
-        int handle = nextHandle++;
-        windows.put(handle, window);
-
         result.success(handle);
+        break;
+      }
+      case "updateWindow": {
+        final List<Number> arguments = call.arguments();
+        final int handle = arguments.get(0).intValue();
+        final Window window = windows.get(handle);
+
+        if (window == null) {
+          result.error("Argument exception", "No window for handle " + handle, null);
+        }
+
+        final LayoutParams params = (LayoutParams)window.view.getLayoutParams();
+        applyParams(params, arguments.subList(1, 6));
+        windowManager.updateViewLayout(window.view, params);
+
+        result.success(null);
+
         break;
       }
       case "destroyWindow": {

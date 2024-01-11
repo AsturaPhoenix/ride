@@ -368,13 +368,12 @@ class Server extends ChangeNotifier {
 
   void _dispatch(Sink<Message> connection, Message args) {
     try {
-      switch (args.first) {
-        case 'id':
-          connections[connection]!.id = args[1] as String;
+      switch (args) {
+        case ['id', final String value]:
+          connections[connection]!.id = value;
           notifyListeners();
           break;
-        case 'assets':
-          final assetsVersion = args[1] as String?;
+        case ['assets', final String? assetsVersion]:
           if (assetsVersion == config.assetsVersion) {
             connections[connection]!.hasAssets = true;
             notifyListeners();
@@ -382,12 +381,12 @@ class Server extends ChangeNotifier {
             pushAssets(connection);
           }
           break;
-        case 'window':
-          connections[connection]!.foregroundPackage = args[1] as String;
+        case ['window', final String foregroundPackage]:
+          connections[connection]!.foregroundPackage = foregroundPackage;
           notifyListeners();
           break;
-        case 'screen':
-          connections[connection]!.screenOn = args[1] as bool;
+        case ['screen', final bool screenOn]:
+          connections[connection]!.screenOn = screenOn;
           notifyListeners();
           break;
       }

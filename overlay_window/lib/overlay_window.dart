@@ -106,27 +106,32 @@ abstract class Gravity {
 class WindowParams {
   static const matchParent = -1, wrapContent = -2;
 
-  final int gravity;
-  final int x, y, width, height;
+  final int? gravity;
+  final int? x, y, width, height;
 
   const WindowParams({
-    this.gravity = Gravity.noGravity,
-    this.x = 0,
-    this.y = 0,
-    this.width = matchParent,
-    this.height = matchParent,
+    this.gravity,
+    this.x,
+    this.y,
+    this.width,
+    this.height,
   });
 }
 
+typedef Entrypoint = void Function(OverlayWindow window);
+
 class OverlayWindow {
   final int _handle;
-  OverlayWindow._(this._handle);
+  OverlayWindow.forHandle(this._handle);
+
+  Future<void> update(WindowParams params) =>
+      OverlayWindowPlatform.instance.updateWindow(_handle, params);
 
   Future<void> destroy() =>
       OverlayWindowPlatform.instance.destroyWindow(_handle);
 
   static Future<OverlayWindow> create(
-          void Function() entrypoint, WindowParams params) async =>
-      OverlayWindow._(await OverlayWindowPlatform.instance
+          Entrypoint entrypoint, WindowParams params) async =>
+      OverlayWindow.forHandle(await OverlayWindowPlatform.instance
           .createWindow(entrypoint, params));
 }

@@ -53,6 +53,7 @@ dependencies:
     path: ../../shared
   screen_state: ^3.0.1
   shared_preferences: ^2.2.2
+  stream_channel: ^2.1.2
   uuid: ^4.3.1
   yaml: ^3.1.2
 

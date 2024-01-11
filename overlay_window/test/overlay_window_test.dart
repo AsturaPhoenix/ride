@@ -11,8 +11,7 @@ class FakeOverlayWindowPlatform extends Fake
   final windows = <int, WindowParams>{};
 
   @override
-  Future<int> createWindow(
-      void Function() entrypoint, WindowParams params) async {
+  Future<int> createWindow(Function entrypoint, WindowParams params) async {
     final handle = nextHandle++;
     windows[handle] = params;
     entrypoint();
