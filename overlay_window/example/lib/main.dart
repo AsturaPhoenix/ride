@@ -8,7 +8,7 @@ void main() {
       overlayWindow: OverlayWindow.create(overlayMain, const WindowParams())));
 }
 
-void overlayMain() {
+void overlayMain(_) {
   runApp(const MaterialApp(home: Text('OVERLAY')));
 }
 

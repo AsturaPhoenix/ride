@@ -15,6 +15,7 @@ class MethodChannelOverlayWindow extends OverlayWindowPlatform {
   static const methodChannel = MethodChannel('overlay_window');
 
   static List<int?> serializeParams(WindowParams params) => [
+        params.flags,
         params.gravity,
         params.x,
         params.y,
@@ -36,6 +37,10 @@ class MethodChannelOverlayWindow extends OverlayWindowPlatform {
   @override
   Future<void> updateWindow(int handle, WindowParams params) => methodChannel
       .invokeMethod('updateWindow', [handle, ...serializeParams(params)]);
+
+  @override
+  Future<void> setVisibility(int handle, int visibility) =>
+      methodChannel.invokeMethod('setVisibility', [handle, visibility]);
 
   @override
   Future<void> destroyWindow(int handle) =>

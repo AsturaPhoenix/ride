@@ -149,7 +149,9 @@ class Client {
       final config = await Config.load();
 
       void setStatus(ClientStatus status) => service.invoke(
-          'syncState', ClientManagerState(status: status).toJson());
+            'syncState',
+            ClientManagerState(status: status).toJson(),
+          );
 
       Client? client;
       CancelableOperation<void>? connectionTask;
@@ -189,24 +191,29 @@ class Client {
 
       final receivePort = ReceivePort(portName);
       IsolateNameServer.registerPortWithName(receivePort.sendPort, portName);
-      SendPort? bottomAppBarSendPort, fabSendPort;
+      SendPort? bodySendPort, bottomAppBarSendPort, fabSendPort;
 
       final receivePortSubscription = receivePort.listen((message) {
         switch (message) {
-          case [RideOverlay, final SendPort sendPort]:
+          case ['NightShade', final SendPort sendPort]:
+            {
+              bodySendPort = sendPort;
+              break;
+            }
+          case ['RideOverlay', final SendPort sendPort]:
             {
               bottomAppBarSendPort = sendPort;
               break;
             }
-          case [SleepButton, final SendPort sendPort]:
+          case ['SleepButton', final SendPort sendPort]:
             {
               fabSendPort = sendPort;
               break;
             }
           case ['softSleep', ...]:
             {
-              if (bottomAppBarSendPort != null && fabSendPort != null) {
-                bottomAppBarSendPort!.send(message);
+              if (bodySendPort != null && fabSendPort != null) {
+                bodySendPort!.send(message);
                 fabSendPort!.send(message);
               }
               break;
@@ -214,20 +221,26 @@ class Client {
         }
       });
 
+      final body = OverlayWindow.create(
+        NightShade.main,
+        const WindowParams(
+          flags: Flag.notFocusable | Flag.notTouchModal | Flag.layoutInScreen,
+        ),
+      );
       final bottomAppBar = OverlayWindow.create(
         RideOverlay.main,
         const WindowParams(
           gravity: Gravity.bottom,
-          height: RideOverlay.iHeight,
+          height: RideOverlay.windowHeight,
         ),
       );
       final fab = OverlayWindow.create(
         SleepButton.main,
         const WindowParams(
           gravity: Gravity.bottom,
-          y: RideOverlay.iHeight - SleepButton.iSize ~/ 2,
-          width: SleepButton.iSize,
-          height: SleepButton.iSize,
+          y: RideOverlay.height - SleepButton.windowSize ~/ 2,
+          width: SleepButton.windowSize,
+          height: SleepButton.windowSize,
         ),
       );
 
@@ -237,8 +250,11 @@ class Client {
       await connectivitySubscription.cancel();
       await connectionTask?.cancel();
 
-      await (await fab).destroy();
-      await (await bottomAppBar).destroy();
+      await Future.wait([
+        (await fab).destroy(),
+        (await bottomAppBar).destroy(),
+        (await body).destroy(),
+      ]);
     } finally {
       IsolateNameServer.removePortNameMapping(portName);
       await service.stopSelf();

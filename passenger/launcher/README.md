@@ -14,6 +14,9 @@ The base API level is 22.
 
 * Enable Chrome lite mode.
 * Ensure Chrome is the default browser (e.g. navigate to Netflix help and always open in Chrome).
+* Other packages to `adb shell su -c pm disable`:
+  * com.amazon.kindle.cms
+  * com.amazon.whisperlink.core.android
 
 ### Keyguard
 

@@ -1,12 +1,9 @@
 package io.baku.overlay_window;
 
-import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
-import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-import static android.view.WindowManager.LayoutParams.TYPE_SYSTEM_ALERT;
+import static android.view.WindowManager.LayoutParams.*;
 
 import android.content.Context;
 import android.graphics.PixelFormat;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 
@@ -39,10 +36,12 @@ import io.flutter.plugin.common.MethodChannel.Result;
  */
 public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, ServiceAware, ActivityAware {
   private static class Window {
+    final OverlayWindowPlugin bindings;
     final FlutterView view;
     final FlutterEngine engine;
 
-    public Window(FlutterView view, FlutterEngine engine) {
+    public Window(OverlayWindowPlugin bindings, FlutterView view, FlutterEngine engine) {
+      this.bindings = bindings;
       this.view = view;
       this.engine = engine;
     }
@@ -50,19 +49,22 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
 
   private static void applyParams(LayoutParams params, List<Number> serializedParams) {
     if (serializedParams.get(0) != null) {
-      params.gravity = serializedParams.get(0).intValue();
+      params.flags = serializedParams.get(0).intValue();
     }
     if (serializedParams.get(1) != null) {
-      params.x = serializedParams.get(1).intValue();
+      params.gravity = serializedParams.get(1).intValue();
     }
     if (serializedParams.get(2) != null) {
-      params.y = serializedParams.get(2).intValue();
+      params.x = serializedParams.get(2).intValue();
     }
     if (serializedParams.get(3) != null) {
-      params.width = serializedParams.get(3).intValue();
+      params.y = serializedParams.get(3).intValue();
     }
     if (serializedParams.get(4) != null) {
-      params.height = serializedParams.get(4).intValue();
+      params.width = serializedParams.get(4).intValue();
+    }
+    if (serializedParams.get(5) != null) {
+      params.height = serializedParams.get(5).intValue();
     }
   }
 
@@ -73,8 +75,8 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
 
   private WindowManager windowManager;
 
-  private int nextHandle;
-  private Map<Integer, Window> windows;
+  private static int nextHandle;
+  private static final Map<Integer, Window> windows = new HashMap<>();
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -84,101 +86,112 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
     context = flutterPluginBinding.getApplicationContext();
 
     windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-
-    windows = new HashMap<>();
   }
 
   @Override
   public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
-    switch (call.method) {
-      case "createWindow": {
-        final List<Number> arguments = call.arguments();
-        final long entrypoint = arguments.get(0).longValue();
-        final LayoutParams params = new LayoutParams(
-            TYPE_SYSTEM_ALERT,
-            FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        );
-        applyParams(params, arguments.subList(1, 6));
+    synchronized (windows) {
+      switch (call.method) {
+        case "createWindow": {
+          final List<Number> arguments = call.arguments();
+          final long entrypoint = arguments.get(0).longValue();
+          final LayoutParams params = new LayoutParams(
+              TYPE_SYSTEM_ALERT,
+              FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL,
+              PixelFormat.TRANSLUCENT
+          );
+          applyParams(params, arguments.subList(1, 7));
 
-        final Window window = new Window(
-            new FlutterView(context, new FlutterSurfaceView(context, true)),
-            new FlutterEngine(context));
+          final Window window = new Window(
+              this,
+              new FlutterView(context, new FlutterSurfaceView(context, true)),
+              new FlutterEngine(context));
 
-        int handle = nextHandle++;
-        windows.put(handle, window);
+          final int handle = nextHandle++;
+          windows.put(handle, window);
 
-        window.engine.getDartExecutor().executeDartEntrypoint(
-            new DartExecutor.DartEntrypoint(
-                FlutterInjector.instance().flutterLoader().findAppBundlePath(),
-                "package:overlay_window/overlay_window_method_channel.dart",
-                "overlayMain"),
-            Arrays.asList(Long.toString(entrypoint), Integer.toString(handle)));
-        if (serviceBinding != null) {
-          attachToService(window.engine);
+          window.engine.getDartExecutor().executeDartEntrypoint(
+              new DartExecutor.DartEntrypoint(
+                  FlutterInjector.instance().flutterLoader().findAppBundlePath(),
+                  "package:overlay_window/overlay_window_method_channel.dart",
+                  "overlayMain"),
+              Arrays.asList(Long.toString(entrypoint), Integer.toString(handle)));
+          if (serviceBinding != null) {
+            attachToService(window.engine);
+          }
+          if (activityBinding != null) {
+            attachToActivity(window.engine);
+          }
+
+          window.view.attachToFlutterEngine(window.engine);
+          windowManager.addView(window.view, params);
+          window.engine.getLifecycleChannel().appIsResumed();
+
+          result.success(handle);
+          break;
         }
-        if (activityBinding != null) {
-          attachToActivity(window.engine);
+        case "updateWindow": {
+          final List<Number> arguments = call.arguments();
+          final int handle = arguments.get(0).intValue();
+          final Window window = windows.get(handle);
+
+          if (window == null) {
+            result.error("Argument exception", "No window for handle " + handle, null);
+            return;
+          }
+
+          final LayoutParams params = (LayoutParams) window.view.getLayoutParams();
+          applyParams(params, arguments.subList(1, 7));
+          windowManager.updateViewLayout(window.view, params);
+
+          result.success(null);
+          break;
         }
+        case "setVisibility": {
+          final List<Integer> arguments = call.arguments();
+          final int handle = arguments.get(0);
+          final Window window = windows.get(handle);
 
-        window.view.attachToFlutterEngine(window.engine);
-        windowManager.addView(window.view, params);
-        window.engine.getLifecycleChannel().appIsResumed();
+          window.view.setVisibility(arguments.get(1));
 
-        result.success(handle);
-        break;
+          result.success(null);
+          break;
+        }
+        case "destroyWindow": {
+          final int handle = call.arguments();
+          final Window window = windows.remove(handle);
+
+          if (window == null) {
+            result.error("Argument exception", "No window for handle " + handle, null);
+            return;
+          }
+
+          windowManager.removeView(window.view);
+
+          window.engine.getLifecycleChannel().appIsInactive();
+          window.engine.getLifecycleChannel().appIsPaused();
+          window.engine.getLifecycleChannel().appIsDetached();
+
+          if (window.bindings.serviceBinding != null) {
+            window.engine.getServiceControlSurface().detachFromService();
+          }
+          if (window.bindings.activityBinding != null) {
+            window.engine.getActivityControlSurface().detachFromActivity();
+          }
+
+          window.engine.destroy();
+
+          result.success(null);
+          break;
+        }
+        default:
+          result.notImplemented();
       }
-      case "updateWindow": {
-        final List<Number> arguments = call.arguments();
-        final int handle = arguments.get(0).intValue();
-        final Window window = windows.get(handle);
-
-        if (window == null) {
-          result.error("Argument exception", "No window for handle " + handle, null);
-        }
-
-        final LayoutParams params = (LayoutParams)window.view.getLayoutParams();
-        applyParams(params, arguments.subList(1, 6));
-        windowManager.updateViewLayout(window.view, params);
-
-        result.success(null);
-
-        break;
-      }
-      case "destroyWindow": {
-        final int handle = call.arguments();
-        final Window window = windows.remove(handle);
-
-        if (window == null) {
-          result.error("Argument exception", "No window for handle " + handle, null);
-        }
-
-        windowManager.removeView(window.view);
-
-        window.engine.getLifecycleChannel().appIsInactive();
-        window.engine.getLifecycleChannel().appIsPaused();
-        window.engine.getLifecycleChannel().appIsDetached();
-
-        if (serviceBinding != null) {
-          window.engine.getServiceControlSurface().detachFromService();
-        }
-        if (activityBinding != null) {
-          window.engine.getActivityControlSurface().detachFromActivity();
-        }
-
-        window.engine.destroy();
-
-        result.success(null);
-        break;
-      }
-      default:
-        result.notImplemented();
     }
   }
 
   @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
-    windows = null;
     windowManager = null;
     channel.setMethodCallHandler(null);
   }
@@ -199,15 +212,23 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
   @Override
   public void onAttachedToService(@NonNull ServicePluginBinding binding) {
     serviceBinding = binding;
-    for (final Window window : windows.values()) {
-      attachToService(window.engine);
+    synchronized (windows) {
+      for (final Window window : windows.values()) {
+        if (window.bindings == this) {
+          attachToService(window.engine);
+        }
+      }
     }
   }
 
   @Override
   public void onDetachedFromService() {
-    for (final Window window : windows.values()) {
-      window.engine.getServiceControlSurface().detachFromService();
+    synchronized (windows) {
+      for (final Window window : windows.values()) {
+        if (window.bindings == this) {
+          window.engine.getServiceControlSurface().detachFromService();
+        }
+      }
     }
     serviceBinding = null;
   }
@@ -215,15 +236,23 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
   @Override
   public void onAttachedToActivity(@NonNull ActivityPluginBinding binding) {
     activityBinding = binding;
-    for (final Window window : windows.values()) {
-      attachToActivity(window.engine);
+    synchronized (windows) {
+      for (final Window window : windows.values()) {
+        if (window.bindings == this) {
+          attachToActivity(window.engine);
+        }
+      }
     }
   }
 
   @Override
   public void onDetachedFromActivityForConfigChanges() {
-    for (final Window window : windows.values()) {
-      window.engine.getActivityControlSurface().detachFromActivityForConfigChanges();
+    synchronized (windows) {
+      for (final Window window : windows.values()) {
+        if (window.bindings == this) {
+          window.engine.getActivityControlSurface().detachFromActivityForConfigChanges();
+        }
+      }
     }
     activityBinding = null;
   }
@@ -235,8 +264,12 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
 
   @Override
   public void onDetachedFromActivity() {
-    for (final Window window : windows.values()) {
-      window.engine.getActivityControlSurface().detachFromActivity();
+    synchronized (windows) {
+      for (final Window window : windows.values()) {
+        if (window.bindings == this) {
+          window.engine.getActivityControlSurface().detachFromActivity();
+        }
+      }
     }
     activityBinding = null;
   }
