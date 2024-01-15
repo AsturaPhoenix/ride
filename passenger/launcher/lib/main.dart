@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'core/client.dart';
@@ -13,8 +14,10 @@ Future<void> main() async {
 
   runApp(
     RideLauncher(
-      clientManager: await ClientManager.initialize()
-        ..start(),
+      clientManager: kIsWeb
+          ? null
+          : (await ClientManager.initialize()
+            ..start()),
     ),
   );
 }

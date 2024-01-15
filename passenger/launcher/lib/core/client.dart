@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:archive/archive_io.dart';
@@ -9,13 +8,11 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:network_info_plus/network_info_plus.dart';
-import 'package:overlay_window/overlay_window.dart';
 import 'package:retry/retry.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
 import 'package:ride_shared/protocol.dart';
 import 'package:screen_state/screen_state.dart';
 
-import '../ui/overlay.dart';
 import 'config.dart';
 
 enum ClientStatus {
@@ -189,72 +186,10 @@ class Client {
         }
       });
 
-      final receivePort = ReceivePort(portName);
-      IsolateNameServer.registerPortWithName(receivePort.sendPort, portName);
-      SendPort? bodySendPort, bottomAppBarSendPort, fabSendPort;
-
-      final receivePortSubscription = receivePort.listen((message) {
-        switch (message) {
-          case ['NightShade', final SendPort sendPort]:
-            {
-              bodySendPort = sendPort;
-              break;
-            }
-          case ['RideOverlay', final SendPort sendPort]:
-            {
-              bottomAppBarSendPort = sendPort;
-              break;
-            }
-          case ['SleepButton', final SendPort sendPort]:
-            {
-              fabSendPort = sendPort;
-              break;
-            }
-          case ['softSleep', ...]:
-            {
-              if (bodySendPort != null && fabSendPort != null) {
-                bodySendPort!.send(message);
-                fabSendPort!.send(message);
-              }
-              break;
-            }
-        }
-      });
-
-      final body = OverlayWindow.create(
-        NightShade.main,
-        const WindowParams(
-          flags: Flag.notFocusable | Flag.notTouchModal | Flag.layoutInScreen,
-        ),
-      );
-      final bottomAppBar = OverlayWindow.create(
-        RideOverlay.main,
-        const WindowParams(
-          gravity: Gravity.bottom,
-          height: RideOverlay.windowHeight,
-        ),
-      );
-      final fab = OverlayWindow.create(
-        SleepButton.main,
-        const WindowParams(
-          gravity: Gravity.bottom,
-          y: RideOverlay.height - SleepButton.windowSize ~/ 2,
-          width: SleepButton.windowSize,
-          height: SleepButton.windowSize,
-        ),
-      );
-
       await service.on('stop').first;
 
-      await receivePortSubscription.cancel();
       await connectivitySubscription.cancel();
       await connectionTask?.cancel();
-
-      await Future.wait([
-        (await fab).destroy(),
-        (await bottomAppBar).destroy(),
-        (await body).destroy(),
-      ]);
     } finally {
       IsolateNameServer.removePortNameMapping(portName);
       await service.stopSelf();

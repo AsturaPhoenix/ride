@@ -46,15 +46,26 @@ class DeviceAppsImpl {
 }
 
 class NavTray extends StatefulWidget {
-  static const double tileHeight = 64.0;
+  static const double tileHeight = 64.0, padding = 64.0, spacing = 24.0;
 
   final bool locked;
   final DeviceAppsImpl deviceApps;
+
+  /// Extra padding at the bottom so that scrollable items clear the bottom app
+  /// bar if drawing behind it.
+  final double bottomGutter;
+
+  /// If the parent window sets state in response to a back gesture and we try
+  /// to pop at the same time, the hero animation fails and the category button
+  /// disappears. Suppress pops if the parent is handling it.
+  final bool wantPops;
 
   const NavTray({
     super.key,
     this.locked = true,
     this.deviceApps = const DeviceAppsImpl(),
+    this.bottomGutter = 0.0,
+    this.wantPops = true,
   });
 
   @override
@@ -120,7 +131,7 @@ class _App extends ChangeNotifier {
         child: Image(
           // Unclear why at least one of these children needs a key to force the
           // animation, since they're different types.
-          key: UniqueKey(),
+          key: ValueKey(icon),
           image: icon,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
               wasSynchronouslyLoaded
@@ -233,6 +244,13 @@ class NavTrayState extends State<NavTray> {
             ),
           );
 
+  EdgeInsets get _scrollPadding => EdgeInsets.fromLTRB(
+        NavTray.padding,
+        NavTray.padding,
+        NavTray.padding,
+        NavTray.padding + widget.bottomGutter,
+      );
+
   Widget _createRootPage(
     BuildContext context,
     Multimap<RideAppCategory, _App> apps,
@@ -240,11 +258,11 @@ class NavTrayState extends State<NavTray> {
       GridView.custom(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
-          crossAxisSpacing: 24,
-          mainAxisSpacing: 24,
+          crossAxisSpacing: NavTray.spacing,
+          mainAxisSpacing: NavTray.spacing,
           mainAxisExtent: NavTray.tileHeight,
         ),
-        padding: const EdgeInsets.all(64),
+        padding: _scrollPadding,
         childrenDelegate: SliverChildListDelegate.fixed([
           for (final category in categoryDisplay.entries.map(
             (entry) => (
@@ -285,9 +303,9 @@ class NavTrayState extends State<NavTray> {
             child: GridView.builder(
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
-                mainAxisExtent: NavTray.tileHeight + 24,
+                mainAxisExtent: NavTray.tileHeight + NavTray.spacing,
               ),
-              padding: const EdgeInsets.all(64),
+              padding: _scrollPadding,
               itemCount: apps.length + extraChildren.length,
               itemBuilder: (context, index) {
                 if (index < apps.length) {
@@ -319,8 +337,8 @@ class NavTrayState extends State<NavTray> {
             ),
           ),
           Positioned(
-            left: 64 - 32,
-            right: 64 + 32 + 24,
+            left: NavTray.padding * 0.5,
+            right: NavTray.padding * 1.5 + NavTray.spacing,
             child: Row(
               children: [
                 Expanded(
@@ -351,57 +369,55 @@ class NavTrayState extends State<NavTray> {
 
   @override
   Widget build(BuildContext context) => DeferredPointerHandler(
-        child: FractionallySizedBox(
-          heightFactor: .4,
-          child: Material(
-            elevation: 1.0,
-            color: Theme.of(context).bottomNavigationBarTheme.backgroundColor,
-            child: Theme(
-              data: Theme.of(context)
-                  .copyWith(pageTransitionsTheme: const NavPageTransitions()),
-              child: StreamBuilder(
-                stream: _apps,
-                builder: (context, apps) => apps.hasData
-                    ? NavigatorPopHandler(
-                        onPop: () => navigatorKey.currentState!.maybePop(),
-                        child: Navigator(
-                          key: navigatorKey,
-                          clipBehavior: Clip.none,
-                          observers: [HeroController()],
-                          pages: [
+        child: Material(
+          elevation: 1.0,
+          child: Theme(
+            data: Theme.of(context)
+                .copyWith(pageTransitionsTheme: const NavPageTransitions()),
+            child: StreamBuilder(
+              stream: _apps,
+              builder: (context, apps) => apps.hasData
+                  ? NavigatorPopHandler(
+                      enabled: widget.wantPops,
+                      onPop: widget.wantPops
+                          ? () => navigatorKey.currentState!.maybePop()
+                          : null,
+                      child: Navigator(
+                        key: navigatorKey,
+                        clipBehavior: Clip.none,
+                        observers: [HeroController()],
+                        pages: [
+                          MaterialPage(
+                            child: _createRootPage(context, apps.data!),
+                          ),
+                          if (selectedCategory != null)
                             MaterialPage(
-                              child: _createRootPage(context, apps.data!),
-                            ),
-                            if (selectedCategory != null)
-                              MaterialPage(
-                                child: Builder(
-                                  builder: (context) => _createCategoryPage(
-                                    context,
-                                    selectedCategory!,
-                                    [...apps.data![selectedCategory]],
-                                    extraChildren: selectedCategory ==
-                                            RideAppCategory.other
-                                        ? const [ProvisionToggle()]
-                                        : const [],
-                                  ),
+                              child: Builder(
+                                builder: (context) => _createCategoryPage(
+                                  context,
+                                  selectedCategory!,
+                                  [...apps.data![selectedCategory]],
+                                  extraChildren:
+                                      selectedCategory == RideAppCategory.other
+                                          ? const [ProvisionToggle()]
+                                          : const [],
                                 ),
                               ),
-                          ],
-                          onPopPage: (route, _) {
-                            if (route.didPop(null) &&
-                                selectedCategory != null) {
-                              setState(() => selectedCategory = null);
-                            }
-                            return false;
-                          },
-                        ),
-                      )
-                    : const UnconstrainedBox(
-                        alignment: Alignment.topCenter,
-                        constrainedAxis: Axis.horizontal,
-                        child: LinearProgressIndicator(),
+                            ),
+                        ],
+                        onPopPage: (route, _) {
+                          if (route.didPop(null) && selectedCategory != null) {
+                            setState(() => selectedCategory = null);
+                          }
+                          return false;
+                        },
                       ),
-              ),
+                    )
+                  : const UnconstrainedBox(
+                      alignment: Alignment.topCenter,
+                      constrainedAxis: Axis.horizontal,
+                      child: LinearProgressIndicator(),
+                    ),
             ),
           ),
         ),
