@@ -10,6 +10,14 @@ extension on Color? {
       Color.lerp(Colors.black, this, brightness);
 }
 
+class RideLauncherController {
+  _RideLauncherState? _state;
+
+  void Function()? onBind, onUnbind;
+
+  void home() => _state!.home();
+}
+
 class RideLauncher extends StatefulWidget {
   static const nightShadeFadeDuration = Duration(milliseconds: 300);
   static const bottomAppBarHeight = 80.0;
@@ -51,8 +59,14 @@ class RideLauncher extends StatefulWidget {
   );
 
   final ClientManager clientManager;
-  RideLauncher({super.key, ClientManager? clientManager})
-      : clientManager = clientManager ?? ClientManager();
+  final DeviceAppsImpl? deviceApps;
+  final RideLauncherController? controller;
+  RideLauncher({
+    super.key,
+    ClientManager? clientManager,
+    this.deviceApps,
+    this.controller,
+  }) : clientManager = clientManager ?? ClientManager();
 
   @override
   State<RideLauncher> createState() => _RideLauncherState();
@@ -60,6 +74,7 @@ class RideLauncher extends StatefulWidget {
 
 class _RideLauncherState extends State<RideLauncher> implements ClientListener {
   final greetingsController = GreetingsController();
+  final navTrayController = NavTrayController();
 
   bool softSleep = false;
 
@@ -67,6 +82,10 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
   void initState() {
     super.initState();
     widget.clientManager.listener = this;
+    assert(widget.controller?._state == null);
+    widget.controller
+      ?.._state = this
+      ..onBind?.call();
 
     () async {
       await RideDevicePolicy.requestAdminIfNeeded();
@@ -79,10 +98,23 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
     super.didUpdateWidget(oldWidget);
     oldWidget.clientManager.listener = null;
     widget.clientManager.listener = this;
+
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller
+        ?.._state = null
+        ..onUnbind?.call();
+      assert(widget.controller?._state == null);
+      widget.controller
+        ?.._state = this
+        ..onBind?.call();
+    }
   }
 
   @override
   void dispose() {
+    widget.controller
+      ?.._state = null
+      ..onUnbind?.call();
     widget.clientManager.listener = null;
     super.dispose();
   }
@@ -90,6 +122,11 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
   @override
   void assetsChanged() {
     greetingsController.reload();
+  }
+
+  void home() {
+    setState(() => softSleep = false);
+    navTrayController.home();
   }
 
   @override
@@ -101,54 +138,47 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
         themeAnimationDuration: RideLauncher.nightShadeFadeDuration,
         home: PopScope(
           canPop: false,
-          onPopInvoked:
-              // We need to avoid the no-op setState if the NavTray is handling
-              // the pop, or we could end up messing with hero animations,
-              // making category buttons disappear.
-              //
-              // This may be a Flutter bug.
-              softSleep ? (_) => setState(() => softSleep = false) : null,
+          onPopInvoked: (_) => setState(() => softSleep = false),
           child: Scaffold(
-            body: AnimatedSwitcher(
-              duration: RideLauncher.nightShadeFadeDuration,
-              child: Stack(
-                children: [
-                  Column(
-                    children: [
-                      Expanded(
-                        child: Greetings(controller: greetingsController),
-                      ),
-                      SizedBox(
-                        height: NavTray.padding * 2 +
-                            NavTray.tileHeight * 2 +
-                            NavTray.spacing +
-                            RideLauncher.bottomAppBarHeight,
-                        child: ListenableBuilder(
-                          listenable: widget.clientManager,
-                          builder: (context, _) => NavTray(
-                            locked: widget.clientManager.status ==
-                                ClientStatus.connected,
-                            bottomGutter: RideLauncher.bottomAppBarHeight,
-                            wantPops: !softSleep,
-                          ),
+            body: Stack(
+              children: [
+                Column(
+                  children: [
+                    Expanded(
+                      child: Greetings(controller: greetingsController),
+                    ),
+                    SizedBox(
+                      height: NavTray.padding * 2 +
+                          NavTray.tileHeight * 2 +
+                          NavTray.spacing +
+                          RideLauncher.bottomAppBarHeight,
+                      child: ListenableBuilder(
+                        listenable: widget.clientManager,
+                        builder: (context, _) => NavTray(
+                          controller: navTrayController,
+                          deviceApps: widget.deviceApps,
+                          locked: widget.clientManager.status ==
+                              ClientStatus.connected,
+                          bottomGutter: RideLauncher.bottomAppBarHeight,
+                          wantPops: !softSleep,
                         ),
                       ),
-                    ],
-                  ),
-                  IgnorePointer(
-                    ignoring: !softSleep,
-                    child: AnimatedOpacity(
-                      duration: RideLauncher.nightShadeFadeDuration,
-                      opacity: softSleep ? 1.0 : 0.0,
-                      child: const ColoredBox(
-                        key: ValueKey('nightshade'),
-                        color: Colors.black,
-                        child: SizedBox.expand(),
-                      ),
+                    ),
+                  ],
+                ),
+                IgnorePointer(
+                  ignoring: !softSleep,
+                  child: AnimatedOpacity(
+                    duration: RideLauncher.nightShadeFadeDuration,
+                    opacity: softSleep ? 1.0 : 0.0,
+                    child: const ColoredBox(
+                      key: ValueKey('nightshade'),
+                      color: Colors.black,
+                      child: SizedBox.expand(),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             extendBody: true,
             bottomNavigationBar: const BottomAppBar(

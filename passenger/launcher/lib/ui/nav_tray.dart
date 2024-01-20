@@ -45,28 +45,34 @@ class DeviceAppsImpl {
       );
 }
 
+class NavTrayController {
+  NavTrayState? state;
+
+  void home() => state!.home();
+}
+
 class NavTray extends StatefulWidget {
   static const double tileHeight = 64.0, padding = 64.0, spacing = 24.0;
 
-  final bool locked;
+  final NavTrayController? controller;
   final DeviceAppsImpl deviceApps;
+  final bool locked;
 
   /// Extra padding at the bottom so that scrollable items clear the bottom app
   /// bar if drawing behind it.
   final double bottomGutter;
 
-  /// If the parent window sets state in response to a back gesture and we try
-  /// to pop at the same time, the hero animation fails and the category button
-  /// disappears. Suppress pops if the parent is handling it.
+  /// Suppress pops if the parent is handling it.
   final bool wantPops;
 
   const NavTray({
     super.key,
+    this.controller,
+    DeviceAppsImpl? deviceApps,
     this.locked = true,
-    this.deviceApps = const DeviceAppsImpl(),
     this.bottomGutter = 0.0,
     this.wantPops = true,
-  });
+  }) : deviceApps = deviceApps ?? const DeviceAppsImpl();
 
   @override
   State<StatefulWidget> createState() => NavTrayState();
@@ -183,13 +189,17 @@ class NavTrayState extends State<NavTray> {
 
   final navigatorKey = GlobalKey<NavigatorState>();
 
+  final _heroController = HeroController();
   late Stream<Multimap<RideAppCategory, _App>> _apps;
   final _iconCache = <String, ImageProvider>{};
   RideAppCategory? selectedCategory;
 
+  void home() => setState(() => selectedCategory = null);
+
   @override
   void initState() {
     super.initState();
+    widget.controller?.state = this;
     _apps = _listenToApps();
   }
 
@@ -197,9 +207,19 @@ class NavTrayState extends State<NavTray> {
   void didUpdateWidget(covariant NavTray oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (widget.controller != oldWidget.controller) {
+      widget.controller?.state = this;
+      oldWidget.controller?.state = null;
+    }
     if (widget.deviceApps != oldWidget.deviceApps) {
       _apps = _listenToApps();
     }
+  }
+
+  @override
+  void dispose() {
+    widget.controller?.state = null;
+    super.dispose();
   }
 
   Stream<Multimap<RideAppCategory, _App>> _listenToApps() async* {
@@ -385,7 +405,7 @@ class NavTrayState extends State<NavTray> {
                       child: Navigator(
                         key: navigatorKey,
                         clipBehavior: Clip.none,
-                        observers: [HeroController()],
+                        observers: [_heroController],
                         pages: [
                           MaterialPage(
                             child: _createRootPage(context, apps.data!),

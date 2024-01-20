@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ride_launcher/fake/device_apps.dart';
 
 import 'package:ride_launcher/ui/launcher.dart';
 
@@ -16,5 +17,52 @@ void main() {
             .didPopRoute(),
         // didPopRoute => false implies an app exit
         isTrue);
+  });
+
+  testWidgets('back from submenu', (WidgetTester tester) async {
+    final controller = RideLauncherController();
+    await tester.pumpWidget(
+      RideLauncher(
+        controller: controller,
+        deviceApps: FakeDeviceApps()..apps = FakeDeviceApps.standardApps,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Video'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsNothing);
+    expect(find.text('Video'), findsOneWidget);
+
+    await (tester.state(find.byType(WidgetsApp)) as WidgetsBindingObserver)
+        .didPopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Video'), findsOneWidget);
+  });
+
+  testWidgets('home from submenu', (WidgetTester tester) async {
+    final controller = RideLauncherController();
+    await tester.pumpWidget(
+      RideLauncher(
+        controller: controller,
+        deviceApps: FakeDeviceApps()..apps = FakeDeviceApps.standardApps,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Video'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsNothing);
+    expect(find.text('Video'), findsOneWidget);
+
+    controller.home();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Music'), findsOneWidget);
+    expect(find.text('Video'), findsOneWidget);
   });
 }
