@@ -19,7 +19,7 @@ class RideLauncherController {
 }
 
 class RideLauncher extends StatefulWidget {
-  static const nightShadeFadeDuration = Duration(milliseconds: 300);
+  static const nightShadeFadeDuration = Duration(milliseconds: 250);
   static const bottomAppBarHeight = 80.0;
   static final colorScheme = ColorScheme.fromSeed(
     seedColor: Colors.white,
@@ -48,14 +48,14 @@ class RideLauncher extends StatefulWidget {
     ),
   );
   static final darkTheme = theme.copyWith(
-    shadowColor: Colors.white,
+    shadowColor: Colors.grey.shade100,
     floatingActionButtonTheme: theme.floatingActionButtonTheme.copyWith(
       backgroundColor:
-          theme.floatingActionButtonTheme.backgroundColor.darken(.5),
-      foregroundColor: Colors.cyanAccent,
+          theme.floatingActionButtonTheme.backgroundColor.darken(.3),
+      foregroundColor: Colors.grey.shade100,
     ),
     bottomAppBarTheme: theme.bottomAppBarTheme
-        .copyWith(color: RideLauncher.colorScheme.primary.darken(.5)),
+        .copyWith(color: RideLauncher.colorScheme.primary.darken(.3)),
   );
 
   final ClientManager clientManager;
