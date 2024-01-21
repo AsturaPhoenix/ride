@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:defer_pointer/defer_pointer.dart';
 import 'package:device_apps/device_apps.dart';
@@ -7,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:quiver/collection.dart';
 import 'package:quiver/iterables.dart';
 
+import '../core/platform.dart' as platform;
 import 'parallelogram_border.dart';
 
 /// Apps on this platform don't seem to populate ApplicationCategory, so we need
@@ -509,18 +509,7 @@ class ProvisionToggle extends StatefulWidget {
 }
 
 class ProvisionToggleState extends State<ProvisionToggle> {
-  static Future<String> run(
-    String executable, [
-    List<String> arguments = const [],
-  ]) async {
-    final result = await Process.run(executable, arguments);
-    final stderr = result.stderr as String;
-    if (stderr.isNotEmpty) throw stderr;
-    if (result.exitCode != 0) throw result.exitCode;
-    return result.stdout as String;
-  }
-
-  static Future<String> getProvisioned() => run('su', const [
+  static Future<String> getProvisioned() => platform.run('su', const [
         '-c',
         'settings',
         'get',
@@ -528,7 +517,7 @@ class ProvisionToggleState extends State<ProvisionToggle> {
         'device_provisioned',
       ]);
 
-  static Future<void> putProvisioned(String value) => run('su', [
+  static Future<void> putProvisioned(String value) => platform.run('su', [
         '-c',
         'settings',
         'put',
@@ -558,7 +547,7 @@ class ProvisionToggleState extends State<ProvisionToggle> {
                 if (provisioned == '1') {
                   await putProvisioned('0');
                   // We need to reboot to get the lock screen to vanish.
-                  await run('su', const ['-c', 'reboot']);
+                  await platform.run('su', const ['-c', 'reboot']);
                 } else {
                   await putProvisioned('1');
                 }

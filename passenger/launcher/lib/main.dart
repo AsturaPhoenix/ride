@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:app_widget_host/app_widget_host_platform_interface.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'core/client.dart';
+import 'fake/app_widget_host.dart';
 import 'fake/device_apps.dart';
 import 'ui/launcher.dart';
 import 'ui/nav_tray.dart';
@@ -38,6 +40,8 @@ Future<void> main() async {
     controller.onBind = () => HardwareKeyboard.instance.addHandler(keyHandler);
     controller.onUnbind =
         () => HardwareKeyboard.instance.removeHandler(keyHandler);
+
+    AppWidgetHostPlatform.instance = FakeAppWidgetHost();
   } else {
     clientManager = await ClientManager.initialize()
       ..start();

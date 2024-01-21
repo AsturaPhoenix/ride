@@ -32,7 +32,9 @@ import io.flutter.plugin.common.PluginRegistry;
  */
 public class RideDevicePolicyPlugin extends DeviceAdminReceiver
     implements FlutterPlugin, MethodCallHandler, StreamHandler, ActivityAware, PluginRegistry.ActivityResultListener {
-  private static final int REQUEST_CODE_ENABLE_ADMIN = 0, REQUEST_CODE_ENABLE_ACCESSIBILITY = 1;
+  private static final int
+      REQUEST_CODE_ENABLE_ADMIN = 0x00,
+      REQUEST_CODE_ENABLE_ACCESSIBILITY = 0x01;
 
   private MethodChannel channel;
   private EventChannel windowEvents;

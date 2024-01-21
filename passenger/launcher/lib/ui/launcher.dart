@@ -1,9 +1,11 @@
+import 'package:app_widget_host/app_widget_host.dart';
 import 'package:flutter/material.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
 
 import '../core/client.dart';
 import 'greetings.dart';
 import 'nav_tray.dart';
+import 'persistent_app_widget.dart';
 
 extension on Color? {
   Color? darken(double brightness) =>
@@ -25,10 +27,10 @@ class RideLauncher extends StatefulWidget {
     seedColor: Colors.white,
     background: Colors.grey.shade800,
     primaryContainer: Colors.grey.shade700,
-    primary: Colors.grey.shade500,
+    secondaryContainer: Colors.grey.shade500,
+    primary: Colors.grey.shade100,
+    onPrimary: Colors.black,
     secondary: Colors.grey.shade400,
-    tertiary: Colors.grey.shade100,
-    onTertiary: Colors.black,
   );
   static final theme = ThemeData(
     colorScheme: RideLauncher.colorScheme,
@@ -36,15 +38,17 @@ class RideLauncher extends StatefulWidget {
     canvasColor: RideLauncher.colorScheme.primaryContainer,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: RideLauncher.colorScheme.tertiary,
-        foregroundColor: RideLauncher.colorScheme.onTertiary,
+        backgroundColor: RideLauncher.colorScheme.primary,
+        foregroundColor: RideLauncher.colorScheme.onPrimary,
         textStyle: const TextStyle(fontSize: 22),
       ),
     ),
     floatingActionButtonTheme:
         FloatingActionButtonThemeData(backgroundColor: colorScheme.secondary),
+    progressIndicatorTheme:
+        const ProgressIndicatorThemeData(color: Color(0xff006874)),
     bottomAppBarTheme: BottomAppBarTheme(
-      color: RideLauncher.colorScheme.primary,
+      color: RideLauncher.colorScheme.secondaryContainer,
     ),
   );
   static final darkTheme = theme.copyWith(
@@ -184,6 +188,21 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
             bottomNavigationBar: const BottomAppBar(
               height: RideLauncher.bottomAppBarHeight,
               shape: CircularNotchedRectangle(),
+              child: Row(
+                children: [
+                  Spacer(),
+                  SizedBox(width: 96.0 + 2 * 16.0),
+                  Expanded(
+                    child: PersistentAppWidget(
+                      borderRadius: BorderRadius.all(Radius.circular(6.0)),
+                      provider: ComponentName(
+                        'com.spotify.music',
+                        'com.spotify.widget.widget.SpotifyWidget',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             floatingActionButtonLocation:
                 FloatingActionButtonLocation.centerDocked,

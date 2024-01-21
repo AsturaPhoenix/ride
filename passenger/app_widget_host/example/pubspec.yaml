@@ -1,25 +1,11 @@
-name: ride_launcher
-description: Launcher for rideshare passenger tablets
+name: app_widget_host_example
+description: "Demonstrates how to use the app_widget_host plugin."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: "none" # Remove this line if you wish to publish to pub.dev
-
-# The following defines the version and build number for your application.
-# A version number is three numbers separated by dots, like 1.2.43
-# followed by an optional build number separated by a +.
-# Both the version and the builder number may be overridden in flutter
-# build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
-# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
-# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
-# Read more about iOS versioning at
-# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-# In Windows, build-name is used as the major, minor, and patch parts
-# of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
 environment:
-  sdk: ">=3.0.0-204.0.dev <4.0.0"
+  sdk: '>=3.2.3 <4.0.0'
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -30,54 +16,38 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_test:
-    sdk: flutter
 
   app_widget_host:
-    path: ../app_widget_host
-  archive: ^3.4.9
-  async: ^2.11.0
-  connectivity_plus: ^5.0.2
+    # When depending on this package from a real application you should use:
+    #   app_widget_host: ^x.y.z
+    # See https://dart.dev/tools/pub/dependencies#version-constraints
+    # The example app is bundled with the plugin so we use a path dependency on
+    # the parent directory to use the current plugin's version.
+    path: ../
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.2
-  defer_pointer: ^0.0.2
-  device_apps: ^2.2.0
-  flutter_background_service: ^5.0.5
-  network_info_plus: ^4.1.0
-  overlay_window:
-    path: ../../overlay_window
-  path: ^1.8.3
-  path_provider: ^2.1.1
-  quiver: ^3.2.1
-  retry: ^3.1.2
-  ride_device_policy:
-    path: ../device_policy
-  ride_shared:
-    path: ../../shared
-  screen_state: ^3.0.1
-  shared_preferences: ^2.2.2
-  stream_channel: ^2.1.2
-  uuid: ^4.3.1
-  yaml: ^3.1.2
 
-dependency_overrides:
-  flutter_background_service_android: 6.0.1 # Android 33 support
-  meta: 1.10.0
+dev_dependencies:
+  integration_test:
+    sdk: flutter
+  flutter_test:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  ride_lints:
-    path: ../../lints
+  flutter_lints: ^2.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
