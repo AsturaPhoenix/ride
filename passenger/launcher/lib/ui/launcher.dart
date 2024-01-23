@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:app_widget_host/app_widget_host.dart';
+import 'package:async/async.dart';
 import 'package:flutter/material.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
+import 'package:spotify_sdk/spotify_sdk.dart';
 
 import '../core/client.dart';
 import 'greetings.dart';
@@ -82,6 +86,49 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
 
   bool softSleep = false;
 
+  late final AppLifecycleListener _appLifecycleListener;
+  Future<bool>? _spotifyRemoteConnect;
+  CancelableOperation<void>? _spotifyKeepAlive;
+
+  Future<bool> _ensureSpotifyConnected() async =>
+      (await _spotifyRemoteConnect ?? false) ||
+      // This may consistently fail to show the auth UI on our target device,
+      // but periodically retrying seems to keep Spotify alive anyway. You may
+      // need to auth on a different device.
+      await (_spotifyRemoteConnect = SpotifySdk.connectToSpotifyRemote(
+        clientId: 'f1e6c611b2b342b18aba74266c39ba3c',
+        redirectUrl: 'http://localhost:80',
+      ).catchError((e) async {
+        try {
+          // If we don't try to disconnect on some connection failures, future
+          // attempts may fail fast.
+          await SpotifySdk.disconnect();
+        } on Object {
+          // ignore
+        }
+        return false;
+      }));
+
+  CancelableOperation<void> _keepSpotifyAlive() {
+    StreamSubscription? subscription;
+    final completer =
+        CancelableCompleter(onCancel: () => subscription?.cancel());
+
+    () async {
+      while (!await _ensureSpotifyConnected() && !completer.isCanceled) {
+        await Future.delayed(const Duration(minutes: 1));
+      }
+
+      if (!completer.isCanceled) {
+        // Whether or not this actually keeps Spotify alive has yet to be
+        // exercised.
+        subscription = SpotifySdk.subscribePlayerState().listen((_) {});
+      }
+    }();
+
+    return completer.operation;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -94,6 +141,18 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
     () async {
       await RideDevicePolicy.requestAdminIfNeeded();
       await RideDevicePolicy.requestAccessibilityIfNeeded();
+
+      // The Spotify widget doesn't actually keep the service alive, so we need
+      // to do it with a remote connection.
+
+      _appLifecycleListener = AppLifecycleListener(
+        onShow: () => _spotifyKeepAlive = _keepSpotifyAlive(),
+        onHide: () {
+          _spotifyKeepAlive?.cancel();
+          _spotifyKeepAlive = null;
+        },
+      );
+      _appLifecycleListener.onShow!();
     }();
   }
 
@@ -116,6 +175,14 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
 
   @override
   void dispose() {
+    _appLifecycleListener.dispose();
+    _spotifyKeepAlive?.cancel();
+    () async {
+      if (await _spotifyRemoteConnect ?? false) {
+        await SpotifySdk.disconnect();
+      }
+    }();
+
     widget.controller
       ?.._state = null
       ..onUnbind?.call();
