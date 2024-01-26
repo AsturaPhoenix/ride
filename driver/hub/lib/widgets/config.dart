@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import '../core/config.dart' as core;
 import '../core/fake_server.dart';
 import '../core/server.dart' as core;
+import '../core/tesla.dart' as tesla;
 import 'assets.dart';
 import 'devices.dart';
 import 'server.dart';
+import 'tesla.dart';
 
 class Config extends StatefulWidget {
   const Config({super.key});
@@ -19,6 +21,7 @@ class ConfigState extends State<Config> {
   late final core.Config config;
   late final core.ServerManager serverManager;
   TextEditingController? portFieldController;
+  tesla.Client? teslaClient;
 
   @override
   void initState() {
@@ -43,6 +46,7 @@ class ConfigState extends State<Config> {
           portFieldController =
               TextEditingController(text: config.serverPort.toString());
         });
+        updateTeslaClient();
 
         serverManager.addListener(() {
           final serverState = serverManager.serverState;
@@ -55,6 +59,7 @@ class ConfigState extends State<Config> {
               config.serverPort = serverState.port;
             }
           }
+          updateTeslaClient();
         });
       }
     }();
@@ -62,9 +67,25 @@ class ConfigState extends State<Config> {
 
   @override
   void dispose() {
+    teslaClient?.close();
     portFieldController?.dispose();
     serverManager.dispose();
     super.dispose();
+  }
+
+  void updateTeslaClient() {
+    if (config.teslaCredentials == null && teslaClient != null) {
+      teslaClient?.close();
+      setState(() => teslaClient = null);
+    } else if (serverManager.lifecycleState ==
+            core.ServerLifecycleState.started &&
+        teslaClient?.remote is! core.ServiceTeslaRemote) {
+      teslaClient?.close();
+      setState(() => teslaClient = tesla.Client(core.ServiceTeslaRemote()));
+    } else if (teslaClient?.remote is! tesla.Oauth2ClientRemote) {
+      teslaClient?.close();
+      setState(() => teslaClient = tesla.Client.oauth2(config));
+    }
   }
 
   @override
@@ -73,58 +94,69 @@ class ConfigState extends State<Config> {
       return const LinearProgressIndicator();
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(left: 8.0),
-      child: ListenableBuilder(
-        listenable: serverManager,
-        builder: (context, _) {
-          final serverState = serverManager.serverState;
-          final double assetsProgress;
-          if (serverState == null) {
+    return ListenableBuilder(
+      listenable: serverManager,
+      builder: (context, _) {
+        final serverState = serverManager.serverState;
+        final double assetsProgress;
+        if (serverState == null) {
+          assetsProgress = 1.0;
+        } else {
+          final hasAssets =
+              serverState.connections.values.where((c) => c.hasAssets).length;
+          final connectionCount = serverState.connections.length;
+          if (hasAssets == 0 && connectionCount == 0) {
             assetsProgress = 1.0;
           } else {
-            final hasAssets =
-                serverState.connections.values.where((c) => c.hasAssets).length;
-            final connectionCount = serverState.connections.length;
-            if (hasAssets == 0 && connectionCount == 0) {
-              assetsProgress = 1.0;
-            } else {
-              assetsProgress = hasAssets / connectionCount;
-            }
+            assetsProgress = hasAssets / connectionCount;
           }
+        }
 
-          return Column(
-            children: [
-              Assets(
-                assets: config.assets,
-                progress: assetsProgress,
-                error: serverState?.lastErrors.assets,
-                onPick: (assets) {
-                  setState(() => config.assets = assets);
-                  serverManager.pushAssets();
-                  // There could be a delay between this call and when the
-                  // status updates to reflect outstanding asset transfers and
-                  // the spinner shows up.
+        return Column(
+          children: [
+            Assets(
+              assets: config.assets,
+              progress: assetsProgress,
+              error: serverState?.lastErrors.assets,
+              onPick: (assets) {
+                setState(() => config.assets = assets);
+                serverManager.pushAssets();
+                // There could be a delay between this call and when the
+                // status updates to reflect outstanding asset transfers and
+                // the spinner shows up.
+              },
+            ),
+            Server(
+              state: serverManager.lifecycleState,
+              error: serverManager.lastError ?? serverState?.lastErrors.general,
+              portFieldController: portFieldController,
+              connectionCount: serverState?.connections.length,
+              start: serverManager.start,
+              stop: serverManager.stop,
+              setPort: serverManager.lifecycleState ==
+                      core.ServerLifecycleState.stopped
+                  ? (value) => setState(() => config.serverPort = value)
+                  : null,
+            ),
+            if (serverState != null) Devices(serverManager: serverManager),
+            Expanded(
+              child: Tesla(
+                client: teslaClient,
+                vehicleId: config.vehicleId,
+                setCredentials: (value) {
+                  setState(() => config.teslaCredentials = value?.toJson());
+                  updateTeslaClient();
+                  serverManager.updateVehicle();
+                },
+                setVehicle: (vehicleId) {
+                  setState(() => config.vehicleId = vehicleId);
+                  serverManager.updateVehicle();
                 },
               ),
-              Server(
-                state: serverManager.lifecycleState,
-                error:
-                    serverManager.lastError ?? serverState?.lastErrors.general,
-                portFieldController: portFieldController,
-                connectionCount: serverState?.connections.length,
-                start: serverManager.start,
-                stop: serverManager.stop,
-                setPort: serverManager.lifecycleState ==
-                        core.ServerLifecycleState.stopped
-                    ? (value) => setState(() => config.serverPort = value)
-                    : null,
-              ),
-              if (serverState != null) Devices(serverManager: serverManager),
-            ],
-          );
-        },
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

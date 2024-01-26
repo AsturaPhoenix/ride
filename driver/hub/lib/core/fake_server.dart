@@ -73,4 +73,7 @@ class FakeServerManager extends ChangeNotifier implements ServerManager {
 
   @override
   void sleep([List<String>? ids]) => _apply(ids, (d) => d.screenOn = false);
+
+  @override
+  void updateVehicle() {}
 }

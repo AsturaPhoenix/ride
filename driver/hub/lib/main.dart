@@ -15,6 +15,9 @@ class RideHub extends StatelessWidget {
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
           useMaterial3: true,
+          listTileTheme: const ListTileThemeData(
+            contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
+          ),
         ),
         home: Scaffold(
           appBar: AppBar(title: const Text('RIDE Hub')),

@@ -8,6 +8,7 @@ import 'package:ride_shared/protocol.dart';
 import 'package:uri_to_file/uri_to_file.dart';
 
 import 'config.dart';
+import 'tesla.dart' as tesla;
 
 enum ServerLifecycleState { stopped, starting, started, stopping, invalid }
 
@@ -164,8 +165,9 @@ class ServerManager extends ChangeNotifier {
   void wake([List<String>? ids]) => _send(['wake'], ids);
   void home([List<String>? ids]) => _send(['home'], ids);
   void sleep([List<String>? ids]) => _send(['sleep'], ids);
+  void updateVehicle() => FlutterBackgroundService().invoke('updateVehicle');
 
-  void _send(Message message, List<String>? ids) =>
+  static void _send(Message message, List<String>? ids) =>
       FlutterBackgroundService().invoke('send', {
         'message': message,
         'ids': ids,
@@ -185,6 +187,47 @@ class ServerErrors {
         'assets': assets?.toString(),
         'general': general?.toString(),
       };
+}
+
+class ServiceTeslaRemote implements tesla.ClientRemote {
+  int _sequenceNumber = 0;
+  final _calls = <int, Completer<Map<String, dynamic>>>{};
+  late final StreamSubscription _subscription;
+
+  ServiceTeslaRemote() {
+    _subscription = FlutterBackgroundService().on('teslaApi').listen((event) {
+      final {
+        'sequenceNumber': int sequenceNumber,
+        'response': Map<String, dynamic> response,
+      } = event!;
+
+      _calls.remove(sequenceNumber)!.complete(response);
+    });
+  }
+
+  @override
+  Future<Map<String, dynamic>> call(
+    String endpoint,
+    Map<String, dynamic> queryParameters,
+  ) async {
+    final completer = Completer<Map<String, dynamic>>();
+    final sequenceNumber = _sequenceNumber++;
+
+    _calls[sequenceNumber] = completer;
+    FlutterBackgroundService().invoke('teslaApi', {
+      'sequenceNumber': sequenceNumber,
+      'endpoint': endpoint,
+      'queryParameters': queryParameters,
+    });
+
+    return completer.future;
+  }
+
+  @override
+  void close() {
+    _subscription.cancel();
+    _calls.clear();
+  }
 }
 
 class DeviceState {
@@ -305,12 +348,30 @@ class Server extends ChangeNotifier {
       final subscriptions = [
         service.on('syncState').listen((_) => syncState()),
         service.on('pushAssets').listen((_) => server.pushAssets()),
+        service.on('updateVehicle').listen((_) => server.updateVehicle()),
         service.on('send').listen(
               (args) => server.send(
                 args!['message'] as Message,
                 args['ids'] as Iterable<String>?,
               ),
             ),
+        service.on('teslaApi').listen((args) async {
+          final {
+            'sequenceNumber': int sequenceNumber,
+            'endpoint': String endpoint,
+            'queryParameters': Map<String, dynamic> queryParameters,
+          } = args!;
+
+          final response = server.teslaClient == null
+              ? {'error': 'Not connected.'}
+              : await server.teslaClient!.remote
+                  .call(endpoint, queryParameters);
+
+          service.invoke('teslaApi', {
+            'sequenceNumber': sequenceNumber,
+            'response': response,
+          });
+        }),
       ];
       await service.on('stop').first;
 
@@ -359,6 +420,8 @@ class Server extends ChangeNotifier {
       },
       onError: onError,
     );
+
+    updateVehicle();
   }
 
   Future<void> close() async {
@@ -367,6 +430,9 @@ class Server extends ChangeNotifier {
   }
 
   void _dispatch(Sink<Message> connection, Message args) {
+    lastErrors.general = null;
+    notifyListeners();
+
     try {
       switch (args) {
         case ['id', final String value]:
@@ -446,9 +512,50 @@ class Server extends ChangeNotifier {
       ];
 
   void send(Message message, [Iterable<String>? ids]) {
-    for (final connection
-        in ids == null ? connections.keys : findConnections({...ids})) {
-      connection.add(message);
+    lastErrors.general = null;
+    notifyListeners();
+
+    try {
+      for (final connection
+          in ids == null ? connections.keys : findConnections({...ids})) {
+        connection.add(message);
+      }
+    } catch (e) {
+      lastErrors.general = e;
+      notifyListeners();
+    }
+  }
+
+  tesla.Client? teslaClient;
+  tesla.Vehicle? vehicle;
+
+  Future<void> updateVehicle() async {
+    lastErrors.general = null;
+    notifyListeners();
+
+    try {
+      await config.reload();
+
+      if (config.teslaCredentials == null) {
+        teslaClient?.close();
+        teslaClient = null;
+        vehicle = null;
+      } else if ((teslaClient?.remote as tesla.Oauth2ClientRemote?)
+              ?.client
+              .credentials
+              .toJson() !=
+          config.teslaCredentials) {
+        teslaClient?.close();
+        teslaClient = tesla.Client.oauth2(config);
+        vehicle = tesla.Vehicle(teslaClient!, config.vehicleId!);
+      } else if (vehicle?.id != config.vehicleId) {
+        vehicle = teslaClient == null
+            ? null
+            : tesla.Vehicle(teslaClient!, config.vehicleId!);
+      }
+    } catch (e) {
+      lastErrors.general = e;
+      notifyListeners();
     }
   }
 }
