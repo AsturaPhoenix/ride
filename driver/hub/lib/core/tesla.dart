@@ -10,7 +10,13 @@ const clientId = 'ownerapi';
 final authEndpoint = Uri.parse('https://auth.tesla.com/oauth2/v3/authorize'),
     tokenEndpoint = Uri.parse('https://auth.tesla.com/oauth2/v3/token'),
     authRedirectUrl = 'https://auth.tesla.com/void/callback';
-const authScopes = ['openid', 'email', 'offline_access', 'vehicle_device_data'];
+const authScopes = [
+  'openid',
+  'email',
+  'offline_access',
+  'vehicle_device_data',
+  'vehicle_cmds',
+];
 
 abstract class ClientRemote {
   Future<Map<String, dynamic>> call(
@@ -101,21 +107,63 @@ class Vehicle {
   String? vin;
   String? displayName;
 
-  Vehicle(
-    this.client,
-    this.id, {
-    this.vin,
-    this.displayName,
-  });
+  double? tempSetting, insideTemp, outsideTemp, minAvailTemp, maxAvailTemp;
+
+  String? activeRouteDestination;
+  double? activeRouteMilesToArrival;
+  double? activeRouteMinutesToArrival;
+
+  double? audioVolume;
+  double? audioVolumeIncrement;
+  double? audioVolumeMax;
+
+  Vehicle(this.client, this.id);
+
+  void _set(Map<String, dynamic> json) {
+    vin = json['vin'] as String?;
+    displayName = json['display_name'] as String?;
+
+    final driverTempSetting = json['driver_temp_setting'] as double?;
+    final passengerTempSetting = json['passenger_temp_setting'] as double?;
+    tempSetting = driverTempSetting != null && passengerTempSetting != null
+        ? (driverTempSetting + passengerTempSetting) / 2
+        : driverTempSetting ?? passengerTempSetting;
+    insideTemp = json['inside_temp'] as double?;
+    outsideTemp = json['outside_temp'] as double?;
+    minAvailTemp = json['min_avail_temp'] as double?;
+    maxAvailTemp = json['max_avail_temp'] as double?;
+
+    final mediaInfo = json['vehicle_state']['media_info'];
+
+    audioVolume = mediaInfo['audio_volume'] as double?;
+    audioVolumeIncrement = mediaInfo['audio_volume_increment'] as double?;
+    audioVolumeMax = mediaInfo['audio_volume_max'] as double?;
+  }
 
   Vehicle.fromJson(this.client, Map<String, dynamic> json)
-      : id = json['id'] as int,
-        vin = json['vin'] as String,
-        displayName = json['display_name'] as String;
+      : id = json['id'] as int {
+    _set(json);
+  }
 
   Future<void> syncState() async {
-    final response = client._call('$baseEndpoint/vehicle_data', {
+    final {'response': response as Map<String, dynamic>} =
+        await client._call('$baseEndpoint/vehicle_data', {
       'endpoints': 'climate_state;drive_state;vehicle_state',
     });
+
+    _set(response);
   }
+
+  Future<void> setTemperature(double value) {
+    final $value = value.toString();
+    return client._call('$baseEndpoint/command/set_temps', {
+      'driver_temp': $value,
+      'passenger_temp': $value,
+    });
+  }
+
+  Future<void> setVolume(double value) =>
+      client._call('$baseEndpoint/command/adjust_volume', {
+        'volume': value.toString(),
+      });
 }

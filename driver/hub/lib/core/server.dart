@@ -201,7 +201,7 @@ class ServiceTeslaRemote implements tesla.ClientRemote {
         'response': Map<String, dynamic> response,
       } = event!;
 
-      _calls.remove(sequenceNumber)!.complete(response);
+      _calls.remove(sequenceNumber)?.complete(response);
     });
   }
 
@@ -429,7 +429,7 @@ class Server extends ChangeNotifier {
     dispose();
   }
 
-  void _dispatch(Sink<Message> connection, Message args) {
+  void _dispatch(Sink<Message> connection, Message args) async {
     lastErrors.general = null;
     notifyListeners();
 
@@ -438,23 +438,48 @@ class Server extends ChangeNotifier {
         case ['id', final String value]:
           connections[connection]!.id = value;
           notifyListeners();
-          break;
         case ['assets', final String? assetsVersion]:
           if (assetsVersion == config.assetsVersion) {
             connections[connection]!.hasAssets = true;
             notifyListeners();
           } else {
-            pushAssets(connection);
+            await pushAssets(connection);
           }
-          break;
         case ['window', final String foregroundPackage]:
           connections[connection]!.foregroundPackage = foregroundPackage;
           notifyListeners();
-          break;
         case ['screen', final bool screenOn]:
           connections[connection]!.screenOn = screenOn;
           notifyListeners();
-          break;
+        case ['vehicle', final Map<String, dynamic> settings]:
+          final vehicle = this.vehicle;
+          if (settings.isEmpty) {
+            await pushVehicle(connection);
+          } else if (vehicle != null) {
+            final updates = <String, dynamic>{};
+            final futures = <Future>[];
+
+            if (settings case {'temperature': final value as double}) {
+              vehicle.tempSetting = value;
+              updates['temperature'] = {'setting': value};
+              futures.add(vehicle.setTemperature(value));
+            }
+            if (settings case {'volume': final value as double}) {
+              vehicle.audioVolume = value;
+              updates['volume'] = {'setting': value};
+              futures.add(vehicle.setVolume(value));
+            }
+
+            if (updates.isNotEmpty) {
+              final message = ['vehicle', updates];
+              for (final other
+                  in connections.keys.where((c) => c != connection)) {
+                other.add(message);
+              }
+            }
+
+            await Future.wait(futures);
+          }
       }
     } catch (e) {
       lastErrors.general = e;
@@ -536,6 +561,8 @@ class Server extends ChangeNotifier {
     try {
       await config.reload();
 
+      final oldVehicle = vehicle;
+
       if (config.teslaCredentials == null) {
         teslaClient?.close();
         teslaClient = null;
@@ -552,6 +579,51 @@ class Server extends ChangeNotifier {
         vehicle = teslaClient == null
             ? null
             : tesla.Vehicle(teslaClient!, config.vehicleId!);
+      }
+
+      if (vehicle != oldVehicle) {
+        await vehicle?.syncState();
+        await pushVehicle();
+      }
+    } catch (e) {
+      lastErrors.general = e;
+      notifyListeners();
+    }
+  }
+
+  Future<void> pushVehicle([Sink<Message>? connection]) async {
+    lastErrors.general = null;
+    notifyListeners();
+
+    try {
+      final vehicle = this.vehicle;
+      if (vehicle != null) {
+        final message = [
+          'vehicle',
+          {
+            'temperature': {
+              'setting': vehicle.tempSetting,
+              'meta': {
+                'min': vehicle.minAvailTemp,
+                'max': vehicle.maxAvailTemp,
+              },
+              'internal': vehicle.insideTemp,
+              'external': vehicle.outsideTemp,
+            },
+            'volume': {
+              'setting': vehicle.audioVolume,
+              'meta': {
+                'step': vehicle.audioVolumeIncrement,
+                'max': vehicle.audioVolumeMax,
+              },
+            },
+          },
+        ];
+
+        for (final connection
+            in connection == null ? connections.keys : [connection]) {
+          connection.add(message);
+        }
       }
     } catch (e) {
       lastErrors.general = e;
