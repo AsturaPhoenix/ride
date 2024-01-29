@@ -57,6 +57,15 @@ class RideLauncher extends StatefulWidget {
     ),
   );
   static final darkTheme = theme.copyWith(
+    colorScheme: theme.colorScheme.copyWith(
+      onSurface: Colors.grey.shade300,
+    ),
+    brightness: Brightness.dark,
+    textTheme: TextTheme.lerp(
+      Typography.blackMountainView,
+      Typography.whiteMountainView,
+      .9,
+    ),
     shadowColor: Colors.grey.shade100,
     floatingActionButtonTheme: theme.floatingActionButtonTheme.copyWith(
       backgroundColor:
@@ -65,6 +74,7 @@ class RideLauncher extends StatefulWidget {
     ),
     bottomAppBarTheme: theme.bottomAppBarTheme
         .copyWith(color: RideLauncher.colorScheme.primary.darken(.3)),
+    iconTheme: theme.iconTheme.copyWith(color: Colors.grey.shade300),
   );
 
   final ClientManager clientManager;
@@ -263,10 +273,12 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
               child: Row(
                 children: [
                   Expanded(
-                    child: TemperatureControls(
-                      clientManager: widget.clientManager,
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      textStyle: Theme.of(context).textTheme.titleLarge,
+                    child: Builder(
+                      builder: (context) => TemperatureControls(
+                        clientManager: widget.clientManager,
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        textStyle: Theme.of(context).textTheme.titleLarge,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 96.0 + 2 * 16.0),
