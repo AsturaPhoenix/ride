@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:archive/archive_io.dart';
@@ -8,11 +9,13 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:overlay_window/overlay_window.dart';
 import 'package:retry/retry.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
 import 'package:ride_shared/protocol.dart';
 import 'package:screen_state/screen_state.dart';
 
+import '../ui/vehicle_controls.dart';
 import 'config.dart';
 
 enum ClientStatus {
@@ -30,7 +33,7 @@ abstract class ClientListener {
 
 typedef ClientEvents = ({
   Stream<ClientManagerState>? state,
-  Stream? assetsChanged
+  Stream? assets,
 });
 
 class ClientManager extends ChangeNotifier {
@@ -55,7 +58,7 @@ class ClientManager extends ChangeNotifier {
       state: service
           .on('syncState')
           .map((event) => ClientManagerState.fromJson(event!)),
-      assetsChanged: service.on('assetsChanged'),
+      assets: service.on('assets'),
     );
     if (await service.isRunning()) {
       service.invoke('syncState');
@@ -72,21 +75,23 @@ class ClientManager extends ChangeNotifier {
 
   ClientStatus _status;
   ClientStatus get status => _status;
+  Map? _vehicle;
+  Map? get vehicle => _vehicle;
 
-  final ClientEvents? streams;
   late final Iterable<StreamSubscription> _subscriptions;
 
   ClientManager({
     this.listener,
     ClientStatus initialStatus = ClientStatus.disconnected,
-    this.streams,
+    ClientEvents? streams,
   }) : _status = initialStatus {
     _subscriptions = [
       streams?.state?.listen((state) {
         _status = state.status;
+        _vehicle = state.vehicle;
         notifyListeners();
       }),
-      streams?.assetsChanged?.listen((_) => listener?.assetsChanged()),
+      streams?.assets?.listen((_) => listener?.assetsChanged()),
     ].nonNulls;
   }
 
@@ -115,6 +120,18 @@ class ClientManager extends ChangeNotifier {
       await Future.delayed(pollInterval);
     }
   }
+
+  void setTemperature(double value) {
+    FlutterBackgroundService().invoke('setTemperature', {'value': value});
+  }
+
+  void setVolume(double value) {
+    FlutterBackgroundService().invoke('setVolume', {'value': value});
+  }
+
+  void showOverlays(bool show) {
+    FlutterBackgroundService().invoke('showOverlays', {'visible': show});
+  }
 }
 
 class _ServiceListener implements ClientListener {
@@ -123,35 +140,59 @@ class _ServiceListener implements ClientListener {
   _ServiceListener(this.service);
 
   @override
-  void assetsChanged() => service.invoke('assetsChanged');
+  void assetsChanged() => service.invoke('assets');
 }
 
 class ClientManagerState {
   final ClientStatus status;
-  const ClientManagerState({required this.status});
+  final Map? vehicle;
+
+  const ClientManagerState({required this.status, this.vehicle});
 
   ClientManagerState.fromJson(Map<String, dynamic> map)
-      : this(status: ClientStatus.fromJson(map['status']));
+      : this(
+          status: ClientStatus.fromJson(map['status']),
+          vehicle: map['vehicle'] as Map?,
+        );
 
-  Map<String, dynamic> toJson() => {'status': status.toJson()};
+  Map<String, dynamic> toJson() => {
+        'status': status.toJson(),
+        'vehicle': vehicle,
+      };
 }
 
-class Client {
-  static const portName = 'Client';
+void _merge(Map original, Map update) {
+  for (final MapEntry(:key, :value) in update.entries) {
+    final oldValue = original[key];
+    if (oldValue is Map && value is Map) {
+      _merge(oldValue, value);
+    } else {
+      original[key] = value;
+    }
+  }
+}
 
+class Client extends ChangeNotifier {
   @pragma('vm:entry-point')
   static Future<void> main(ServiceInstance service) async {
     try {
       final listener = _ServiceListener(service);
       final config = await Config.load();
 
-      void setStatus(ClientStatus status) => service.invoke(
-            'syncState',
-            ClientManagerState(status: status).toJson(),
-          );
+      ClientStatus status = ClientStatus.disconnected;
+
+      void setStatus(ClientStatus value) {
+        status = value;
+        service.invoke(
+          'syncState',
+          ClientManagerState(status: value).toJson(),
+        );
+      }
 
       Client? client;
       CancelableOperation<void>? connectionTask;
+
+      final overlayPorts = <String, SendPort?>{};
 
       CancelableOperation<void> maintainConnection() =>
           Client.connectWithRetry(config).thenOperation(
@@ -161,7 +202,27 @@ class Client {
               client = newClient;
               setStatus(ClientStatus.connected);
 
+              newClient.addListener(
+                () {
+                  service.invoke(
+                    'syncState',
+                    ClientManagerState(
+                      status: status,
+                      vehicle: newClient.vehicle,
+                    ).toJson(),
+                  );
+
+                  for (var MapEntry(key: portName, value: port)
+                      in overlayPorts.entries) {
+                    port ??= overlayPorts[portName] =
+                        IsolateNameServer.lookupPortByName(portName);
+                    port?.send(newClient.vehicle);
+                  }
+                },
+              );
+
               await newClient.disconnected;
+              newClient.dispose();
               client = null;
               setStatus(ClientStatus.disconnected);
 
@@ -172,26 +233,75 @@ class Client {
             onCancel: (completer) => client?.close(),
           );
 
-      final connectivitySubscription = Connectivity()
-          .onConnectivityChanged
-          .listen((connectivityResult) async {
-        await connectionTask?.cancel();
-        connectionTask = null;
+      final overlayWindows = [
+        OverlayWindow.create(
+          TemperatureControls.main,
+          const WindowParams(
+            flags: Flag.notFocusable | Flag.notTouchModal | Flag.layoutNoLimits,
+            gravity: Gravity.bottom | Gravity.left,
+            y: -48,
+            width: 192,
+            height: 48,
+          ),
+        ),
+        OverlayWindow.create(
+          VolumeControls.main,
+          const WindowParams(
+            flags: Flag.notFocusable | Flag.notTouchModal | Flag.layoutNoLimits,
+            gravity: Gravity.bottom | Gravity.right,
+            y: -48,
+            width: 192,
+            height: 48,
+          ),
+        ),
+      ];
 
-        if (connectivityResult == ConnectivityResult.wifi) {
-          connectionTask = maintainConnection();
-          setStatus(ClientStatus.connecting);
-        } else {
-          setStatus(ClientStatus.disconnected);
-        }
-      });
+      final subscriptions = [
+        service.on('syncState').listen((_) {
+          service.invoke(
+            'syncState',
+            ClientManagerState(
+              status: status,
+              vehicle: client?.vehicle,
+            ).toJson(),
+          );
+        }),
+        Connectivity().onConnectivityChanged.listen((connectivityResult) async {
+          await connectionTask?.cancel();
+          connectionTask = null;
+
+          if (connectivityResult == ConnectivityResult.wifi) {
+            connectionTask = maintainConnection();
+            setStatus(ClientStatus.connecting);
+          } else {
+            setStatus(ClientStatus.disconnected);
+          }
+        }),
+        service.on('setTemperature').listen((args) {
+          client?.setTemperature((args!['value'] as num).toDouble());
+        }),
+        service.on('setVolume').listen((args) {
+          client?.setVolume((args!['value'] as num).toDouble());
+        }),
+        service.on('showOverlays').listen((args) {
+          final visibility = args!['visible'] as bool
+              ? OverlayWindow.visible
+              : OverlayWindow.gone;
+          for (final overlayWindow in overlayWindows) {
+            (() async => (await overlayWindow).setVisibility(visibility))();
+          }
+        }),
+      ];
 
       await service.on('stop').first;
 
-      await connectivitySubscription.cancel();
+      await Future.wait([
+        for (final subscription in subscriptions) subscription.cancel(),
+        for (final overlayWindow in overlayWindows)
+          (() async => (await overlayWindow).destroy())(),
+      ]);
       await connectionTask?.cancel();
     } finally {
-      IsolateNameServer.removePortNameMapping(portName);
       await service.stopSelf();
     }
   }
@@ -235,6 +345,8 @@ class Client {
 
   late final StreamSubscription _windowEventSubscription, _screenSubscription;
 
+  Map? vehicle;
+
   Client({
     required this.config,
     required Socket socket,
@@ -247,6 +359,7 @@ class Client {
 
     _send(['id', config.id]);
     _send(['assets', config.assetsVersion]);
+    _send(['vehicle']);
 
     _applyDevicePolicy();
 
@@ -286,13 +399,10 @@ class Client {
 
   Future<void> _dispatch(Message args) async {
     switch (args) {
-      case ['id', final String value]:
-        {
-          config.id = value;
-          _send(['id', config.id]);
-          break;
-        }
-      case ['assets', final Uint8List assets]:
+      case ['id', final value as String]:
+        config.id = value;
+        _send(['id', config.id]);
+      case ['assets', final assets as Uint8List]:
         {
           final archive = ZipDecoder().decodeBytes(assets, verify: true);
           final path = await Config.getAssetsPath();
@@ -307,27 +417,33 @@ class Client {
 
           config.assetsVersion = computeAssetsVersion(assets);
           _send(['assets', config.assetsVersion]);
-
-          break;
         }
       case ['wake']:
-        {
-          await RideDevicePolicy.wakeUp();
-          break;
-        }
+        await RideDevicePolicy.wakeUp();
       case ['home']:
-        {
-          await RideDevicePolicy.home();
-          await RideDevicePolicy.wakeUp();
-          break;
-        }
+        await RideDevicePolicy.home();
+        await RideDevicePolicy.wakeUp();
       case ['sleep']:
-        {
-          await RideDevicePolicy.lockNow();
-          break;
+        await RideDevicePolicy.lockNow();
+      case ['vehicle', final data as Map]:
+        if (vehicle == null) {
+          vehicle = data;
+        } else {
+          _merge(vehicle!, data);
         }
+        notifyListeners();
     }
   }
 
   void _send(List<dynamic> args) => _socket.add(args);
+
+  void setTemperature(double value) => _send([
+        'vehicle',
+        {'temperature': value},
+      ]);
+
+  void setVolume(double value) => _send([
+        'vehicle',
+        {'volume': value},
+      ]);
 }

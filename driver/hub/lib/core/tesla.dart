@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:http/http.dart' as http;
 import 'package:oauth2/oauth2.dart' as oauth2;
 
 import 'config.dart';
@@ -20,8 +21,9 @@ const authScopes = [
 
 abstract class ClientRemote {
   Future<Map<String, dynamic>> call(
+    String method,
     String endpoint,
-    Map<String, dynamic> queryParameters,
+    Map<String, dynamic> args,
   );
 
   void close();
@@ -36,6 +38,7 @@ class Oauth2ClientRemote implements ClientRemote {
       : this(
           oauth2.Client(
             oauth2.Credentials.fromJson(config.teslaCredentials!),
+            identifier: clientId,
             onCredentialsRefreshed: (credentials) =>
                 config.teslaCredentials = credentials.toJson(),
           ),
@@ -43,15 +46,24 @@ class Oauth2ClientRemote implements ClientRemote {
 
   @override
   Future<Map<String, dynamic>> call(
+    String method,
     String endpoint,
-    Map<String, dynamic> queryParameters,
+    Map<String, dynamic> args,
   ) async {
-    final response = await client.get(
-      baseUrl.resolve(endpoint).replace(queryParameters: queryParameters),
-      headers: const {'Content-Type': 'application/json'},
-    );
-    if (response.statusCode != HttpStatus.ok) throw response.statusCode;
+    Uri url = baseUrl.resolve(endpoint);
+    if (method == 'GET') {
+      url = url.replace(queryParameters: args);
+    }
 
+    final request = http.Request(method, url)
+      ..headers['Content-Type'] = 'application/json';
+    if (method == 'POST') {
+      request.body = jsonEncode(args);
+    }
+
+    final response = await http.Response.fromStream(await client.send(request));
+
+    if (response.statusCode != HttpStatus.ok) throw response.statusCode;
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
@@ -68,10 +80,11 @@ class Client {
   void close() => remote.close();
 
   Future<Map<String, dynamic>> _call(
+    String method,
     String endpoint,
-    Map<String, dynamic> queryParameters,
+    Map<String, dynamic> args,
   ) async {
-    final response = await remote.call(endpoint, queryParameters);
+    final response = await remote.call(method, endpoint, args);
 
     if (response.containsKey('error') ||
         response.containsKey('error_description') ||
@@ -86,7 +99,8 @@ class Client {
     int? page,
     int? perPage,
   }) async {
-    final response = await _call('api/1/products', {'page': page?.toString()});
+    final response =
+        await _call('GET', 'api/1/products', {'page': page?.toString()});
 
     return (
       [
@@ -113,9 +127,7 @@ class Vehicle {
   double? activeRouteMilesToArrival;
   double? activeRouteMinutesToArrival;
 
-  double? audioVolume;
-  double? audioVolumeIncrement;
-  double? audioVolumeMax;
+  double? audioVolume, audioVolumeIncrement, audioVolumeMax;
 
   Vehicle(this.client, this.id);
 
@@ -123,21 +135,33 @@ class Vehicle {
     vin = json['vin'] as String?;
     displayName = json['display_name'] as String?;
 
-    final driverTempSetting = json['driver_temp_setting'] as double?;
-    final passengerTempSetting = json['passenger_temp_setting'] as double?;
+    final climateState = json['climate_state'];
+
+    final driverTempSetting =
+        (climateState?['driver_temp_setting'] as num?)?.toDouble();
+    final passengerTempSetting =
+        (climateState?['passenger_temp_setting'] as num?)?.toDouble();
     tempSetting = driverTempSetting != null && passengerTempSetting != null
         ? (driverTempSetting + passengerTempSetting) / 2
         : driverTempSetting ?? passengerTempSetting;
-    insideTemp = json['inside_temp'] as double?;
-    outsideTemp = json['outside_temp'] as double?;
-    minAvailTemp = json['min_avail_temp'] as double?;
-    maxAvailTemp = json['max_avail_temp'] as double?;
+    insideTemp = (climateState?['inside_temp'] as num?)?.toDouble();
+    outsideTemp = (climateState?['outside_temp'] as num?)?.toDouble();
+    minAvailTemp = (climateState?['min_avail_temp'] as num?)?.toDouble();
+    maxAvailTemp = (climateState?['max_avail_temp'] as num?)?.toDouble();
 
-    final mediaInfo = json['vehicle_state']['media_info'];
+    final driveState = json['drive_state'];
+    activeRouteDestination = driveState?['active_route_destination'] as String?;
+    activeRouteMilesToArrival =
+        (driveState?['active_route_miles_to_arrival'] as num?)?.toDouble();
+    activeRouteMinutesToArrival =
+        (driveState?['active_route_minutes_to_arrival'] as num?)?.toDouble();
 
-    audioVolume = mediaInfo['audio_volume'] as double?;
-    audioVolumeIncrement = mediaInfo['audio_volume_increment'] as double?;
-    audioVolumeMax = mediaInfo['audio_volume_max'] as double?;
+    final mediaInfo = json['vehicle_state']?['media_info'];
+
+    audioVolume = (mediaInfo?['audio_volume'] as num?)?.toDouble();
+    audioVolumeIncrement =
+        (mediaInfo?['audio_volume_increment'] as num?)?.toDouble();
+    audioVolumeMax = (mediaInfo?['audio_volume_max'] as num?)?.toDouble();
   }
 
   Vehicle.fromJson(this.client, Map<String, dynamic> json)
@@ -147,23 +171,21 @@ class Vehicle {
 
   Future<void> syncState() async {
     final {'response': response as Map<String, dynamic>} =
-        await client._call('$baseEndpoint/vehicle_data', {
+        await client._call('GET', '$baseEndpoint/vehicle_data', {
       'endpoints': 'climate_state;drive_state;vehicle_state',
     });
 
     _set(response);
   }
 
-  Future<void> setTemperature(double value) {
-    final $value = value.toString();
-    return client._call('$baseEndpoint/command/set_temps', {
-      'driver_temp': $value,
-      'passenger_temp': $value,
-    });
-  }
+  Future<void> setTemperature(double value) =>
+      client._call('POST', '$baseEndpoint/command/set_temps', {
+        'driver_temp': value,
+        'passenger_temp': value,
+      });
 
   Future<void> setVolume(double value) =>
-      client._call('$baseEndpoint/command/adjust_volume', {
-        'volume': value.toString(),
+      client._call('POST', '$baseEndpoint/command/adjust_volume', {
+        'volume': value,
       });
 }

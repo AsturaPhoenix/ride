@@ -33,6 +33,9 @@ class MethodChannelAppWidgetHost extends AppWidgetHostPlatform {
   Future<bool> configureAppWidget(int appWidgetId) async =>
       await methodChannel.invokeMethod('configureAppWidget', appWidgetId);
   @override
+  Future<bool> checkAppWidget(int appWidgetId) async =>
+      await methodChannel.invokeMethod('checkAppWidget', appWidgetId);
+  @override
   Future<void> deleteAppWidgetId(int appWidgetId) async =>
       await methodChannel.invokeMethod('deleteAppWidgetId', appWidgetId);
 }

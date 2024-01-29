@@ -8,6 +8,7 @@ import 'icons.dart';
 class Tesla extends StatefulWidget {
   final tesla.Client? client;
   final int? vehicleId;
+  final Object? error;
   final void Function(oauth2.Credentials? cedentials) setCredentials;
   final void Function(int vehicleId) setVehicle;
 
@@ -15,6 +16,7 @@ class Tesla extends StatefulWidget {
     super.key,
     this.client,
     this.vehicleId,
+    this.error,
     required this.setCredentials,
     required this.setVehicle,
   });
@@ -30,7 +32,8 @@ class _TeslaState extends State<Tesla> {
 
   WebViewController? webViewController;
   bool busy = false;
-  String? error;
+  Object? authError;
+  Object? get error => authError ?? widget.error;
 
   final _pages = <int, Future<List<tesla.Vehicle>>>{};
   int? _pageSize, _vehicleCount;
@@ -88,7 +91,7 @@ class _TeslaState extends State<Tesla> {
                 } catch (e) {
                   if (mounted) {
                     setState(() {
-                      error = e.toString();
+                      authError = e;
                       busy = false;
                     });
                   }
@@ -108,7 +111,7 @@ class _TeslaState extends State<Tesla> {
       );
 
     setState(() {
-      error = null;
+      authError = null;
       webViewController = controller;
     });
   }
@@ -128,11 +131,13 @@ class _TeslaState extends State<Tesla> {
                     dimension: 24.0,
                     child: CircularProgressIndicator(),
                   )
-                : widget.hasCredentials
-                    ? okIcon
-                    : missingIcon,
+                : !widget.hasCredentials
+                    ? missingIcon
+                    : error != null
+                        ? errorIcon
+                        : okIcon,
             title: const Text('Tesla'),
-            subtitle: error == null ? null : Text(error!),
+            subtitle: error == null ? null : Text(error.toString()),
             trailing: IconButton(
               onPressed: () {
                 if (widget.hasCredentials) {

@@ -23,6 +23,10 @@ abstract class AppWidgetHost {
           .requestBindAppWidget(appWidgetId, provider);
   static Future<bool> configureAppWidget(int appWidgetId) =>
       AppWidgetHostPlatform.instance.configureAppWidget(appWidgetId);
+  // Sometimes, after an update, our appWidgetId can get unbound, making our
+  // persisted binding state invalid. In this case, we need to rebind.
+  static Future<bool> checkAppWidget(int appWidgetId) =>
+      AppWidgetHostPlatform.instance.checkAppWidget(appWidgetId);
   static Future<void> deleteAppWidgetId(int appWidgetId) =>
       AppWidgetHostPlatform.instance.deleteAppWidgetId(appWidgetId);
 }

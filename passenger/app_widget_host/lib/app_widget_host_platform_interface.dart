@@ -29,5 +29,6 @@ abstract class AppWidgetHostPlatform extends PlatformInterface {
       int appWidgetId, ComponentName provider);
   Future<bool> requestBindAppWidget(int appWidgetId, ComponentName provider);
   Future<bool> configureAppWidget(int appWidgetId);
+  Future<bool> checkAppWidget(int appWidgetId);
   Future<void> deleteAppWidgetId(int appWidgetId);
 }

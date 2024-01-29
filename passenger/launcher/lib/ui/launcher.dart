@@ -10,6 +10,7 @@ import '../core/client.dart';
 import 'greetings.dart';
 import 'nav_tray.dart';
 import 'persistent_app_widget.dart';
+import 'vehicle_controls.dart';
 
 extension on Color? {
   Color? darken(double brightness) =>
@@ -146,8 +147,12 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
       // to do it with a remote connection.
 
       _appLifecycleListener = AppLifecycleListener(
-        onShow: () => _spotifyKeepAlive = _keepSpotifyAlive(),
+        onShow: () {
+          widget.clientManager.showOverlays(false);
+          _spotifyKeepAlive = _keepSpotifyAlive();
+        },
         onHide: () {
+          widget.clientManager.showOverlays(true);
           _spotifyKeepAlive?.cancel();
           _spotifyKeepAlive = null;
         },
@@ -252,20 +257,34 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
               ],
             ),
             extendBody: true,
-            bottomNavigationBar: const BottomAppBar(
+            bottomNavigationBar: BottomAppBar(
               height: RideLauncher.bottomAppBarHeight,
-              shape: CircularNotchedRectangle(),
+              shape: const CircularNotchedRectangle(),
               child: Row(
                 children: [
-                  Spacer(),
-                  SizedBox(width: 96.0 + 2 * 16.0),
                   Expanded(
-                    child: PersistentAppWidget(
-                      borderRadius: BorderRadius.all(Radius.circular(6.0)),
-                      provider: ComponentName(
-                        'com.spotify.music',
-                        'com.spotify.widget.widget.SpotifyWidget',
-                      ),
+                    child: TemperatureControls(
+                      clientManager: widget.clientManager,
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      textStyle: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  const SizedBox(width: 96.0 + 2 * 16.0),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: PersistentAppWidget(
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(6.0)),
+                            provider: ComponentName(
+                              'com.spotify.music',
+                              'com.spotify.widget.widget.SpotifyWidget',
+                            ),
+                          ),
+                        ),
+                        VolumeControls(clientManager: widget.clientManager),
+                      ],
                     ),
                   ),
                 ],

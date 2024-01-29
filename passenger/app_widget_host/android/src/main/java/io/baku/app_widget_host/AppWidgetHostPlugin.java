@@ -3,6 +3,7 @@ package io.baku.app_widget_host;
 import android.app.Activity;
 import android.appwidget.AppWidgetHost;
 import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetProviderInfo;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -108,7 +109,8 @@ public class AppWidgetHostPlugin implements
       }
       case "configureAppWidget": {
         final int appWidgetId = call.arguments();
-        if (appWidgetManager.getAppWidgetInfo(appWidgetId).configure == null) {
+        final AppWidgetProviderInfo info = appWidgetManager.getAppWidgetInfo(appWidgetId);
+        if (info.configure == null) {
           result.success(true);
         } else {
           if (activityResult != null) {
@@ -122,6 +124,11 @@ public class AppWidgetHostPlugin implements
               REQUEST_CONFIGURE_APPWIDGET,
               null);
         }
+        break;
+      }
+      case "checkAppWidget": {
+        final int appWidgetId = call.arguments();
+        result.success(appWidgetManager.getAppWidgetInfo(appWidgetId) != null);
         break;
       }
       case "deleteAppWidgetId": {

@@ -1,5 +1,6 @@
 import 'package:app_widget_host/app_widget_host.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/platform.dart' as platform;
@@ -20,7 +21,7 @@ class PersistentAppWidget extends StatefulWidget {
   State<StatefulWidget> createState() => _PersistentAppWidgetState();
 }
 
-enum _BindingState { unbound, bound, configured }
+enum _BindingState { initial, allocated, bound, configured }
 
 class _PersistentAppWidgetState extends State<PersistentAppWidget> {
   static const keyPrefix = 'PersistentAppWidget';
@@ -31,8 +32,11 @@ class _PersistentAppWidgetState extends State<PersistentAppWidget> {
   String get bindingStateKey => '$tagKey:bindingStateKey';
 
   late final SharedPreferences sharedPreferences;
-  late final int appWidgetId;
-  _BindingState bindingState = _BindingState.unbound;
+  late int appWidgetId;
+  _BindingState bindingState = _BindingState.initial;
+
+  /// State modifications are hidden behind a spinner while this is true, so
+  /// there's no need to setState for them.
   bool bindInProgress = true;
 
   @override
@@ -41,33 +45,40 @@ class _PersistentAppWidgetState extends State<PersistentAppWidget> {
 
     () async {
       sharedPreferences = await SharedPreferences.getInstance();
-      if (!mounted) return;
-
-      int? idResult = sharedPreferences.getInt(appWidgetIdKey);
-      if (idResult == null) {
-        idResult = await AppWidgetHost.allocateAppWidgetId();
-        sharedPreferences.setInt(appWidgetIdKey, idResult);
-        if (!mounted) return;
+      final idResult = sharedPreferences.getInt(appWidgetIdKey);
+      if (idResult != null) {
+        appWidgetId = idResult;
       }
-
       final bindingStateIndex = sharedPreferences.getInt(bindingStateKey);
+      bindingState = bindingStateIndex == null || idResult == null
+          ? _BindingState.initial
+          : _BindingState.values[bindingStateIndex];
 
-      setState(() {
-        appWidgetId = idResult!;
-        bindingState = bindingStateIndex == null
-            ? _BindingState.unbound
-            : _BindingState.values[bindingStateIndex];
-      });
-
-      await bind();
+      if (mounted) {
+        await bind();
+      }
     }();
   }
 
   Future<void> bind() async {
     setState(() => bindInProgress = true);
 
+    void setBindingState(_BindingState value) {
+      sharedPreferences.setInt(bindingStateKey, value.index);
+      bindingState = value;
+    }
+
     switch (bindingState) {
-      case _BindingState.unbound:
+      restart:
+      case _BindingState.initial:
+        appWidgetId = await AppWidgetHost.allocateAppWidgetId();
+        if (!mounted) return;
+
+        sharedPreferences.setInt(appWidgetIdKey, appWidgetId);
+        setBindingState(_BindingState.allocated);
+        continue a;
+      a:
+      case _BindingState.allocated:
         if (!await AppWidgetHost.bindAppWidgetIdIfAllowed(
           appWidgetId,
           widget.provider,
@@ -98,26 +109,35 @@ class _PersistentAppWidgetState extends State<PersistentAppWidget> {
           }
         }
 
-        sharedPreferences.setInt(bindingStateKey, _BindingState.bound.index);
         if (!mounted) return;
-        setState(() => bindingState = _BindingState.bound);
-        continue a;
-      a:
-      case _BindingState.bound:
-        if (await AppWidgetHost.configureAppWidget(appWidgetId)) {
-          sharedPreferences.setInt(
-            bindingStateKey,
-            _BindingState.configured.index,
-          );
-          if (!mounted) return;
-          setState(() {
-            bindingState = _BindingState.configured;
-          });
-        }
+        setBindingState(_BindingState.bound);
         continue b;
       b:
+      case _BindingState.bound:
+        try {
+          if (await AppWidgetHost.configureAppWidget(appWidgetId)) {
+            sharedPreferences.setInt(
+              bindingStateKey,
+              _BindingState.configured.index,
+            );
+            if (!mounted) return;
+            setBindingState(_BindingState.configured);
+          }
+          if (!mounted) return;
+          continue c;
+        } on PlatformException {
+          if (!mounted) return;
+          setBindingState(_BindingState.initial);
+          continue restart;
+        }
+      c:
       default:
-        if (mounted) {
+        if (!await AppWidgetHost.checkAppWidget(appWidgetId)) {
+          if (!mounted) return;
+          setBindingState(_BindingState.initial);
+          continue restart;
+        } else {
+          if (!mounted) return;
           setState(() => bindInProgress = false);
         }
     }

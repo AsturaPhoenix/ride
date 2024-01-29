@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'core/client.dart';
 import 'fake/app_widget_host.dart';
+import 'fake/client_manager.dart';
 import 'fake/device_apps.dart';
 import 'ui/launcher.dart';
 import 'ui/nav_tray.dart';
@@ -24,7 +25,7 @@ Future<void> main() async {
   final controller = RideLauncherController();
 
   if (kIsWeb) {
-    clientManager = null;
+    clientManager = FakeClientManager();
 
     deviceApps = FakeDeviceApps()..apps = FakeDeviceApps.standardApps;
 

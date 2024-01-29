@@ -131,6 +131,9 @@ class Flag {
   /// according to the {@link #layoutInDisplayCutoutMode}.
   static const layoutInScreen = 0x00000100;
 
+  /// Window flag: allow window to extend outside of the screen.
+  static const layoutNoLimits = 0x00000200;
+
   /// Window flag: hide all screen decorations (such as the status bar) while
   /// this window is displayed. This allows the window to use the entire display
   /// space for itself--the status bar will be hidden when an app window with
@@ -150,6 +153,15 @@ class Flag {
   /// {@link android.R.style#Theme_DeviceDefault_NoActionBar_Fullscreen}, and
   /// {@link android.R.style#Theme_DeviceDefault_Light_NoActionBar_Fullscreen}.
   static const fullscreen = 0x00000400;
+
+  /// Window flag: a special option only for use in combination with
+  /// FLAG_LAYOUT_IN_SCREEN. When requesting layout in the screen your window
+  /// may appear on top of or behind screen decorations such as the status bar.
+  /// By also including this flag, the window manager will report the inset
+  /// rectangle needed to ensure your content is not covered by screen
+  /// decorations. This flag is normally set for you by Window as described in
+  /// Window#setFlags
+  static const layoutInsetDecor = 0x00010000;
 
   /// Flag indicating that this Window is responsible for drawing the background
   /// for the system bars. If set, the system bars are drawn with a transparent

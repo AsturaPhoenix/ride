@@ -37,7 +37,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "io.baku.ride_launcher"
-        minSdkVersion 21
+        minSdkVersion 22
         targetSdkVersion 22
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName

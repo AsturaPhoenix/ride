@@ -143,6 +143,7 @@ class ConfigState extends State<Config> {
               child: Tesla(
                 client: teslaClient,
                 vehicleId: config.vehicleId,
+                error: serverState?.lastErrors.vehicle,
                 setCredentials: (value) {
                   setState(() => config.teslaCredentials = value?.toJson());
                   updateTeslaClient();

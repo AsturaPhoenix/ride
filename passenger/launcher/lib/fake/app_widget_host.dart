@@ -26,4 +26,7 @@ class FakeAppWidgetHost extends AppWidgetHostPlatform {
 
   @override
   Future<void> deleteAppWidgetId(int appWidgetId) async {}
+
+  @override
+  Future<bool> checkAppWidget(int appWidgetId) async => true;
 }

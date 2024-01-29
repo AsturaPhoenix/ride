@@ -163,9 +163,14 @@ class ServerManager extends ChangeNotifier {
 
   void pushAssets() => FlutterBackgroundService().invoke('pushAssets');
   void wake([List<String>? ids]) => _send(['wake'], ids);
-  void home([List<String>? ids]) => _send(['home'], ids);
+  void home([List<String>? ids]) {
+    _send(['home'], ids);
+    updateVehicle(refresh: true);
+  }
+
   void sleep([List<String>? ids]) => _send(['sleep'], ids);
-  void updateVehicle() => FlutterBackgroundService().invoke('updateVehicle');
+  void updateVehicle({bool refresh = false}) =>
+      FlutterBackgroundService().invoke('updateVehicle', {'refresh': refresh});
 
   static void _send(Message message, List<String>? ids) =>
       FlutterBackgroundService().invoke('send', {
@@ -177,15 +182,18 @@ class ServerManager extends ChangeNotifier {
 class ServerErrors {
   Object? assets;
   Object? general;
+  Object? vehicle;
 
   ServerErrors({this.assets, this.general});
   ServerErrors.fromJson(Map<String, dynamic> map)
       : assets = map['assets'],
-        general = map['general'];
+        general = map['general'],
+        vehicle = map['vehicle'];
 
   Map<String, dynamic> toJson() => {
         'assets': assets?.toString(),
         'general': general?.toString(),
+        'vehicle': vehicle?.toString(),
       };
 }
 
@@ -207,8 +215,9 @@ class ServiceTeslaRemote implements tesla.ClientRemote {
 
   @override
   Future<Map<String, dynamic>> call(
+    String method,
     String endpoint,
-    Map<String, dynamic> queryParameters,
+    Map<String, dynamic> args,
   ) async {
     final completer = Completer<Map<String, dynamic>>();
     final sequenceNumber = _sequenceNumber++;
@@ -216,8 +225,9 @@ class ServiceTeslaRemote implements tesla.ClientRemote {
     _calls[sequenceNumber] = completer;
     FlutterBackgroundService().invoke('teslaApi', {
       'sequenceNumber': sequenceNumber,
+      'method': method,
       'endpoint': endpoint,
-      'queryParameters': queryParameters,
+      'args': args,
     });
 
     return completer.future;
@@ -348,31 +358,43 @@ class Server extends ChangeNotifier {
       final subscriptions = [
         service.on('syncState').listen((_) => syncState()),
         service.on('pushAssets').listen((_) => server.pushAssets()),
-        service.on('updateVehicle').listen((_) => server.updateVehicle()),
+        service.on('updateVehicle').listen(
+              (args) => server.updateVehicle(refresh: args!['refresh'] as bool),
+            ),
         service.on('send').listen(
               (args) => server.send(
                 args!['message'] as Message,
                 args['ids'] as Iterable<String>?,
               ),
             ),
-        service.on('teslaApi').listen((args) async {
+        service.on('teslaApi').listen((event) async {
           final {
             'sequenceNumber': int sequenceNumber,
+            'method': String method,
             'endpoint': String endpoint,
-            'queryParameters': Map<String, dynamic> queryParameters,
-          } = args!;
+            'args': Map<String, dynamic> args,
+          } = event!;
 
-          final response = server.teslaClient == null
-              ? {'error': 'Not connected.'}
-              : await server.teslaClient!.remote
-                  .call(endpoint, queryParameters);
+          try {
+            final response = server.teslaClient == null
+                ? {'error': 'Not connected.'}
+                : await server.teslaClient!.remote.call(method, endpoint, args);
 
-          service.invoke('teslaApi', {
-            'sequenceNumber': sequenceNumber,
-            'response': response,
-          });
+            service.invoke('teslaApi', {
+              'sequenceNumber': sequenceNumber,
+              'response': response,
+            });
+          } catch (e) {
+            service.invoke('teslaApi', {
+              'sequenceNumber': sequenceNumber,
+              'response': {
+                'error': e.toString(),
+              },
+            });
+          }
         }),
       ];
+
       await service.on('stop').first;
 
       await Future.wait([
@@ -451,34 +473,41 @@ class Server extends ChangeNotifier {
         case ['screen', final bool screenOn]:
           connections[connection]!.screenOn = screenOn;
           notifyListeners();
-        case ['vehicle', final Map<String, dynamic> settings]:
-          final vehicle = this.vehicle;
-          if (settings.isEmpty) {
-            await pushVehicle(connection);
-          } else if (vehicle != null) {
-            final updates = <String, dynamic>{};
-            final futures = <Future>[];
+        case ['vehicle']:
+          await pushVehicle(connection);
+        case ['vehicle', final Map settings]:
+          try {
+            lastErrors.vehicle = null;
+            notifyListeners();
 
-            if (settings case {'temperature': final value as double}) {
-              vehicle.tempSetting = value;
-              updates['temperature'] = {'setting': value};
-              futures.add(vehicle.setTemperature(value));
-            }
-            if (settings case {'volume': final value as double}) {
-              vehicle.audioVolume = value;
-              updates['volume'] = {'setting': value};
-              futures.add(vehicle.setVolume(value));
-            }
+            final vehicle = this.vehicle;
+            if (vehicle != null) {
+              final updates = <String, dynamic>{};
+              final futures = <Future>[];
 
-            if (updates.isNotEmpty) {
-              final message = ['vehicle', updates];
-              for (final other
-                  in connections.keys.where((c) => c != connection)) {
-                other.add(message);
+              if (settings case {'temperature': final value as num}) {
+                vehicle.tempSetting = value.toDouble();
+                updates['temperature'] = {'setting': value};
+                futures.add(vehicle.setTemperature(value.toDouble()));
               }
-            }
+              if (settings case {'volume': final value as num}) {
+                vehicle.audioVolume = value.toDouble();
+                updates['volume'] = {'setting': value};
+                futures.add(vehicle.setVolume(value.toDouble()));
+              }
 
-            await Future.wait(futures);
+              if (updates.isNotEmpty) {
+                final message = ['vehicle', updates];
+                for (final connection in connections.keys) {
+                  connection.add(message);
+                }
+              }
+
+              await Future.wait(futures);
+            }
+          } catch (e) {
+            lastErrors.vehicle = e;
+            notifyListeners();
           }
       }
     } catch (e) {
@@ -554,8 +583,8 @@ class Server extends ChangeNotifier {
   tesla.Client? teslaClient;
   tesla.Vehicle? vehicle;
 
-  Future<void> updateVehicle() async {
-    lastErrors.general = null;
+  Future<void> updateVehicle({bool refresh = false}) async {
+    lastErrors.vehicle = null;
     notifyListeners();
 
     try {
@@ -581,18 +610,18 @@ class Server extends ChangeNotifier {
             : tesla.Vehicle(teslaClient!, config.vehicleId!);
       }
 
-      if (vehicle != oldVehicle) {
+      if (vehicle != oldVehicle || refresh) {
         await vehicle?.syncState();
         await pushVehicle();
       }
     } catch (e) {
-      lastErrors.general = e;
+      lastErrors.vehicle = e;
       notifyListeners();
     }
   }
 
   Future<void> pushVehicle([Sink<Message>? connection]) async {
-    lastErrors.general = null;
+    lastErrors.vehicle = null;
     notifyListeners();
 
     try {
@@ -626,7 +655,7 @@ class Server extends ChangeNotifier {
         }
       }
     } catch (e) {
-      lastErrors.general = e;
+      lastErrors.vehicle = e;
       notifyListeners();
     }
   }
