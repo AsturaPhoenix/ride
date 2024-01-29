@@ -19,6 +19,8 @@ const authScopes = [
   'vehicle_cmds',
 ];
 
+const throttlePeriod = Duration(seconds: 2);
+
 abstract class ClientRemote {
   Future<Map<String, dynamic>> call(
     String method,
@@ -129,6 +131,11 @@ class Vehicle {
 
   double? audioVolume, audioVolumeIncrement, audioVolumeMax;
 
+  final _throttle = (
+    temperature: Throttle(throttlePeriod),
+    volume: Throttle(throttlePeriod),
+  );
+
   Vehicle(this.client, this.id);
 
   void _set(Map<String, dynamic> json) {
@@ -178,14 +185,55 @@ class Vehicle {
     _set(response);
   }
 
-  Future<void> setTemperature(double value) =>
-      client._call('POST', '$baseEndpoint/command/set_temps', {
-        'driver_temp': value,
-        'passenger_temp': value,
-      });
+  Future<void> setTemperature(double value) => _throttle.temperature.add(
+        () => client._call('POST', '$baseEndpoint/command/set_temps', {
+          'driver_temp': value,
+          'passenger_temp': value,
+        }),
+      );
 
-  Future<void> setVolume(double value) =>
-      client._call('POST', '$baseEndpoint/command/adjust_volume', {
-        'volume': value,
-      });
+  Future<void> setVolume(double value) => _throttle.volume.add(
+        () => client._call('POST', '$baseEndpoint/command/adjust_volume', {
+          'volume': value,
+        }),
+      );
+}
+
+class Throttle {
+  final Duration period;
+  Throttle(this.period);
+
+  bool _busy = false;
+  ({Future<void> Function() call, Completer<void> completer})? _next;
+
+  void _execute(Future<void> Function() call, Completer<void> completer) {
+    () async {
+      try {
+        final result = call();
+        completer.complete(result);
+        await Future.wait([result, Future.delayed(period)]);
+      } on Object {
+        // continue
+      }
+      final next = _next;
+      if (next != null) {
+        _next = null;
+        _execute(next.call, next.completer);
+      } else {
+        _busy = false;
+      }
+    }();
+  }
+
+  Future<void> add(Future<void> Function() call) {
+    final completer = Completer<void>();
+    if (!_busy) {
+      _busy = true;
+      _execute(call, completer);
+    } else {
+      _next?.completer.complete();
+      _next = (call: call, completer: completer);
+    }
+    return completer.future;
+  }
 }

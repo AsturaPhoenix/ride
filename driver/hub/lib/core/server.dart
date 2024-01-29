@@ -498,8 +498,10 @@ class Server extends ChangeNotifier {
 
               if (updates.isNotEmpty) {
                 final message = ['vehicle', updates];
-                for (final connection in connections.keys) {
-                  connection.add(message);
+                for (final other in connections.keys) {
+                  if (other != connection) {
+                    other.add(message);
+                  }
                 }
               }
 

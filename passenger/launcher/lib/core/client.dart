@@ -437,13 +437,21 @@ class Client extends ChangeNotifier {
 
   void _send(List<dynamic> args) => _socket.add(args);
 
-  void setTemperature(double value) => _send([
-        'vehicle',
-        {'temperature': value},
-      ]);
+  void setTemperature(double value) {
+    vehicle?['temperature']['setting'] = value;
+    notifyListeners();
+    _send([
+      'vehicle',
+      {'temperature': value},
+    ]);
+  }
 
-  void setVolume(double value) => _send([
-        'vehicle',
-        {'volume': value},
-      ]);
+  void setVolume(double value) {
+    vehicle?['volume']['setting'] = value;
+    notifyListeners();
+    _send([
+      'vehicle',
+      {'volume': value},
+    ]);
+  }
 }
