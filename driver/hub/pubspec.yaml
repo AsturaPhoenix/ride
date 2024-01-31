@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+  async: ^2.11.0
   file_picker: ^6.1.1
   flutter_background_service: ^5.0.5
   http: ^1.1.2

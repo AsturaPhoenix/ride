@@ -35,7 +35,7 @@ class _TeslaState extends State<Tesla> {
   Object? authError;
   Object? get error => authError ?? widget.error;
 
-  final _pages = <int, Future<List<tesla.Vehicle>>>{};
+  final _pages = <int, ({Future<List<tesla.Vehicle>> future, DateTime t})>{};
   int? _pageSize, _vehicleCount;
 
   @override
@@ -180,26 +180,42 @@ class _TeslaState extends State<Tesla> {
                 itemCount: _vehicleCount,
                 itemBuilder: (context, i) {
                   final page = _pageSize == null ? 0 : i ~/ _pageSize!;
-                  return FutureBuilder(
-                    future: _pages[page] ??= () async {
-                      final client = widget.client;
-                      // For now, always evict. We might consider making this an LRU
-                      // cache of size 2. Don't bother setStateing right now.
-                      _pages.clear();
-                      final (vehicles, count) =
-                          await widget.client!.vehicles(page: page + 1);
-                      if (mounted && widget.client == client) {
-                        if (vehicles.length < count && page == 0) {
-                          _pageSize = vehicles.length;
-                        }
-                        setState(() => _vehicleCount = count);
+                  final now = DateTime.now();
 
-                        if (widget.vehicleId == null && vehicles.isNotEmpty) {
-                          widget.setVehicle(vehicles.first.id);
-                        }
-                      }
-                      return vehicles;
-                    }(),
+                  const pageTtl = Duration(seconds: 15);
+                  final pageRecord = _pages.remove(page) ??
+                      (
+                        t: now,
+                        future: () async {
+                          final client = widget.client;
+                          // First evict cache by TTL, then by LRU.
+                          _pages.removeWhere(
+                            (_, value) => now.difference(value.t) >= pageTtl,
+                          );
+                          while (_pages.length > 2) {
+                            _pages.remove(_pages.keys.first);
+                          }
+
+                          final (vehicles, count) =
+                              await widget.client!.vehicles(page: page + 1);
+                          if (mounted && widget.client == client) {
+                            if (vehicles.length < count && page == 0) {
+                              _pageSize = vehicles.length;
+                            }
+                            setState(() => _vehicleCount = count);
+
+                            if (widget.vehicleId == null &&
+                                vehicles.isNotEmpty) {
+                              widget.setVehicle(vehicles.first.id);
+                            }
+                          }
+                          return vehicles;
+                        }(),
+                      );
+                  _pages[page] = pageRecord;
+
+                  return FutureBuilder(
+                    future: pageRecord.future,
                     builder: (context, vehicles) {
                       if (vehicles.hasData) {
                         final vehicle =

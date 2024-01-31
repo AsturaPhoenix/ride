@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:http/http.dart' as http;
@@ -429,6 +430,7 @@ class Server extends ChangeNotifier {
           id: socket.remoteAddress.address,
         );
         notifyListeners();
+        _maybeUpdatePolling();
 
         // Listen for incoming messages from the client
         socket.transform(decoder).listen(
@@ -437,6 +439,7 @@ class Server extends ChangeNotifier {
           onDone: () {
             connections.remove(sink);
             notifyListeners();
+            _maybeUpdatePolling();
           },
         );
       },
@@ -447,8 +450,22 @@ class Server extends ChangeNotifier {
   }
 
   Future<void> close() async {
+    await _vehiclePolling?.cancel();
     await serverSocket.close();
     dispose();
+  }
+
+  /// Query whether any client has its screen on. If the screen-on state is
+  /// unknown, assume it's on to be safe.
+  bool get hasActiveClient => connections.values.any((c) => c.screenOn ?? true);
+
+  void _maybeUpdatePolling() {
+    if (hasActiveClient) {
+      _vehiclePolling ??= _pollVehicle();
+    } else {
+      _vehiclePolling?.cancel();
+      _vehiclePolling = null;
+    }
   }
 
   void _dispatch(Sink<Message> connection, Message args) async {
@@ -473,8 +490,9 @@ class Server extends ChangeNotifier {
         case ['screen', final bool screenOn]:
           connections[connection]!.screenOn = screenOn;
           notifyListeners();
+          _maybeUpdatePolling();
         case ['vehicle']:
-          await pushVehicle(connection);
+          pushVehicle(connection);
         case ['vehicle', final Map settings]:
           try {
             lastErrors.vehicle = null;
@@ -482,18 +500,18 @@ class Server extends ChangeNotifier {
 
             final vehicle = this.vehicle;
             if (vehicle != null) {
+              // Echo a partial vehicle state update to other clients.
               final updates = <String, dynamic>{};
               final futures = <Future>[];
+              final now = DateTime.now();
 
               if (settings case {'temperature': final value as num}) {
-                vehicle.tempSetting = value.toDouble();
                 updates['temperature'] = {'setting': value};
-                futures.add(vehicle.setTemperature(value.toDouble()));
+                futures.add(vehicle.setTemperature(value.toDouble(), now));
               }
               if (settings case {'volume': final value as num}) {
-                vehicle.audioVolume = value.toDouble();
                 updates['volume'] = {'setting': value};
-                futures.add(vehicle.setVolume(value.toDouble()));
+                futures.add(vehicle.setVolume(value.toDouble(), now));
               }
 
               if (updates.isNotEmpty) {
@@ -584,6 +602,56 @@ class Server extends ChangeNotifier {
 
   tesla.Client? teslaClient;
   tesla.Vehicle? vehicle;
+  static const vehiclePollingInterval = Duration(seconds: 10),
+      vehiclePollingTimeout = Duration(seconds: 20),
+      vehicleUpdateShadow = Duration(seconds: 10);
+
+  CancelableOperation<void>? _vehiclePolling;
+
+  CancelableOperation<void> _pollVehicle() {
+    Timer? timer;
+    Future? sync;
+    final completer = CancelableCompleter(
+      onCancel: () async {
+        timer?.cancel();
+        await sync;
+      },
+    );
+
+    void poll() async {
+      lastErrors.vehicle = null;
+      notifyListeners();
+
+      try {
+        // We can skip the large vehicle_state fetch if we don't need to update
+        // volume info. Climate info includes interior and exterior temp so it's
+        // probably worth syncing regardless.
+        sync = vehicle?.syncState({
+          tesla.VehicleTopic.climate,
+          if (vehicle?.state.volume.setting.canDownlink() ?? true)
+            tesla.VehicleTopic.volume,
+          tesla.VehicleTopic.drive,
+        }).timeout(vehiclePollingTimeout, onTimeout: () {});
+        await sync;
+
+        if (!completer.isCanceled) {
+          pushVehicle();
+        }
+      } catch (e) {
+        lastErrors.vehicle = e;
+        notifyListeners();
+      } finally {
+        sync = null;
+      }
+
+      if (!completer.isCanceled) {
+        timer = Timer(vehiclePollingInterval, poll);
+      }
+    }
+
+    poll();
+    return completer.operation;
+  }
 
   Future<void> updateVehicle({bool refresh = false}) async {
     lastErrors.vehicle = null;
@@ -605,16 +673,24 @@ class Server extends ChangeNotifier {
           config.teslaCredentials) {
         teslaClient?.close();
         teslaClient = tesla.Client.oauth2(config);
-        vehicle = tesla.Vehicle(teslaClient!, config.vehicleId!);
+        vehicle =
+            tesla.Vehicle(teslaClient!, config.vehicleId!, vehicleUpdateShadow);
       } else if (vehicle?.id != config.vehicleId) {
         vehicle = teslaClient == null
             ? null
-            : tesla.Vehicle(teslaClient!, config.vehicleId!);
+            : tesla.Vehicle(
+                teslaClient!, config.vehicleId!, vehicleUpdateShadow);
       }
 
       if (vehicle != oldVehicle || refresh) {
-        await vehicle?.syncState();
-        await pushVehicle();
+        _vehiclePolling?.cancel();
+        if (hasActiveClient) {
+          _vehiclePolling = _pollVehicle();
+        } else {
+          _vehiclePolling = null;
+          await vehicle?.syncState();
+          pushVehicle();
+        }
       }
     } catch (e) {
       lastErrors.vehicle = e;
@@ -622,34 +698,16 @@ class Server extends ChangeNotifier {
     }
   }
 
-  Future<void> pushVehicle([Sink<Message>? connection]) async {
+  void pushVehicle([
+    Sink<Message>? connection,
+  ]) {
     lastErrors.vehicle = null;
     notifyListeners();
 
     try {
       final vehicle = this.vehicle;
       if (vehicle != null) {
-        final message = [
-          'vehicle',
-          {
-            'temperature': {
-              'setting': vehicle.tempSetting,
-              'meta': {
-                'min': vehicle.minAvailTemp,
-                'max': vehicle.maxAvailTemp,
-              },
-              'internal': vehicle.insideTemp,
-              'external': vehicle.outsideTemp,
-            },
-            'volume': {
-              'setting': vehicle.audioVolume,
-              'meta': {
-                'step': vehicle.audioVolumeIncrement,
-                'max': vehicle.audioVolumeMax,
-              },
-            },
-          },
-        ];
+        final message = ['vehicle', vehicle.state.toJson()];
 
         for (final connection
             in connection == null ? connections.keys : [connection]) {

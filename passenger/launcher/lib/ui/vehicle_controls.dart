@@ -17,6 +17,10 @@ Widget _wrap(Widget child) => MaterialApp(
     );
 
 class TemperatureControls extends StatelessWidget {
+  // The car seems to use a fudged Celcius-to-Fahrenheit conversion.
+  static String format(double temperature) =>
+      '${(temperature * 2 + 28).round()}°F';
+
   @pragma('vm:entry-point')
   static Future<void> main(_) async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -43,28 +47,18 @@ class TemperatureControls extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: clientManager,
         builder: (context, _) {
-          final data = clientManager.vehicle?['temperature'] as Map?;
-          final setting = data?['setting'] as num?;
+          final climate = clientManager.vehicle.climate;
+          final setting = climate.setting.value;
 
-          final num min, max;
-          if (setting != null) {
-            {
-              'meta': {
-                'min': min,
-                'max': max,
-              } as Map
-            } = data!;
-          } else {
-            min = double.negativeInfinity;
-            max = double.infinity;
-          }
+          final min = climate.meta.min ?? double.negativeInfinity,
+              max = climate.meta.max ?? double.infinity;
 
           return NumericControl(
             mainAxisSize: mainAxisSize,
             mainAxisAlignment: mainAxisAlignment,
-            value: setting?.toDouble(),
-            min: min.toDouble(),
-            max: max.toDouble(),
+            value: setting,
+            min: min,
+            max: max,
             step: 0.5, // Tesla uses a .5 degree mapping to Fahrenheit.
             onChange: clientManager.setTemperature,
             child: AspectRatio(
@@ -78,11 +72,8 @@ class TemperatureControls extends StatelessWidget {
                           : setting == max
                               ? 'HI' // Actually, the car ends up snapping to HI
                               // a degree early, e.g. max = 28 C, but setting to
-                              // 27 snaps to 28. (This bears no relation to the
-                              // 28 below, which is 32 in our .5°F per °C
-                              // world.) Also, both 15.5 and 16 end up mapping
-                              // to 60°F.
-                              : '${(setting * 2 + 28).round()}°F',
+                              // 27 snaps to 28.
+                              : format(setting),
                   style: textStyle,
                 ),
               ),
@@ -115,31 +106,21 @@ class VolumeControls extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: clientManager,
         builder: (context, _) {
-          final data = clientManager.vehicle?['volume'] as Map?;
-          final setting = data?['setting'] as num?;
+          final volume = clientManager.vehicle.volume;
+          final setting = volume.setting.value;
 
-          final num step, max;
-          if (setting != null) {
-            {
-              'meta': {
-                'step': step,
-                'max': max,
-              } as Map
-            } = data!;
-          } else {
-            step = 1.0;
-            max = double.infinity;
-          }
+          final step = volume.meta.step ?? 1.0,
+              max = volume.meta.max ?? double.infinity;
 
           final normalizedVolume = setting == null ? 0.5 : setting / max;
 
           return NumericControl(
             mainAxisSize: mainAxisSize,
             mainAxisAlignment: mainAxisAlignment,
-            value: setting?.toDouble(),
+            value: setting,
             min: 0.0,
-            max: max.toDouble(),
-            step: step.toDouble(),
+            max: max,
+            step: step,
             onChange: clientManager.setVolume,
             child: AspectRatio(
               aspectRatio: 1.0,

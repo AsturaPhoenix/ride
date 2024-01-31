@@ -75,8 +75,7 @@ class ClientManager extends ChangeNotifier {
 
   ClientStatus _status;
   ClientStatus get status => _status;
-  Map? _vehicle;
-  Map? get vehicle => _vehicle;
+  final VehicleState vehicle;
 
   late final Iterable<StreamSubscription> _subscriptions;
 
@@ -84,11 +83,14 @@ class ClientManager extends ChangeNotifier {
     this.listener,
     ClientStatus initialStatus = ClientStatus.disconnected,
     ClientEvents? streams,
-  }) : _status = initialStatus {
+  })  : _status = initialStatus,
+        vehicle = VehicleState() {
     _subscriptions = [
       streams?.state?.listen((state) {
         _status = state.status;
-        _vehicle = state.vehicle;
+        if (state.vehicle != null) {
+          vehicle.fromJson(state.vehicle!, UpdateDirection.fromUpstream);
+        }
         notifyListeners();
       }),
       streams?.assets?.listen((_) => listener?.assetsChanged()),
@@ -145,31 +147,20 @@ class _ServiceListener implements ClientListener {
 
 class ClientManagerState {
   final ClientStatus status;
-  final Map? vehicle;
+  final Map<String, dynamic>? vehicle;
 
   const ClientManagerState({required this.status, this.vehicle});
 
   ClientManagerState.fromJson(Map<String, dynamic> map)
       : this(
           status: ClientStatus.fromJson(map['status']),
-          vehicle: map['vehicle'] as Map?,
+          vehicle: map['vehicle'] as Map<String, dynamic>?,
         );
 
   Map<String, dynamic> toJson() => {
         'status': status.toJson(),
         'vehicle': vehicle,
       };
-}
-
-void _merge(Map original, Map update) {
-  for (final MapEntry(:key, :value) in update.entries) {
-    final oldValue = original[key];
-    if (oldValue is Map && value is Map) {
-      _merge(oldValue, value);
-    } else {
-      original[key] = value;
-    }
-  }
 }
 
 class Client extends ChangeNotifier {
@@ -208,7 +199,7 @@ class Client extends ChangeNotifier {
                     'syncState',
                     ClientManagerState(
                       status: status,
-                      vehicle: newClient.vehicle,
+                      vehicle: newClient.vehicle.toJson(),
                     ).toJson(),
                   );
 
@@ -262,7 +253,7 @@ class Client extends ChangeNotifier {
             'syncState',
             ClientManagerState(
               status: status,
-              vehicle: client?.vehicle,
+              vehicle: client?.vehicle.toJson(),
             ).toJson(),
           );
         }),
@@ -345,7 +336,7 @@ class Client extends ChangeNotifier {
 
   late final StreamSubscription _windowEventSubscription, _screenSubscription;
 
-  Map? vehicle;
+  final VehicleState vehicle = VehicleState(const Duration(seconds: 2));
 
   Client({
     required this.config,
@@ -426,11 +417,7 @@ class Client extends ChangeNotifier {
       case ['sleep']:
         await RideDevicePolicy.lockNow();
       case ['vehicle', final data as Map]:
-        if (vehicle == null) {
-          vehicle = data;
-        } else {
-          _merge(vehicle!, data);
-        }
+        vehicle.fromJson(data, UpdateDirection.fromUpstream);
         notifyListeners();
     }
   }
@@ -438,7 +425,7 @@ class Client extends ChangeNotifier {
   void _send(List<dynamic> args) => _socket.add(args);
 
   void setTemperature(double value) {
-    vehicle?['temperature']['setting'] = value;
+    vehicle.climate.setting.fromDownstream(value);
     notifyListeners();
     _send([
       'vehicle',
@@ -447,7 +434,7 @@ class Client extends ChangeNotifier {
   }
 
   void setVolume(double value) {
-    vehicle?['volume']['setting'] = value;
+    vehicle.volume.setting.fromDownstream(value);
     notifyListeners();
     _send([
       'vehicle',

@@ -32,33 +32,39 @@ class RideLauncher extends StatefulWidget {
     seedColor: Colors.white,
     background: Colors.grey.shade800,
     primaryContainer: Colors.grey.shade700,
-    secondaryContainer: Colors.grey.shade500,
+    onPrimaryContainer: Colors.grey.shade100,
+    secondaryContainer: Colors.grey.shade400,
     primary: Colors.grey.shade100,
     onPrimary: Colors.black,
     secondary: Colors.grey.shade400,
+    onSecondary: Colors.black,
   );
   static final theme = ThemeData(
-    colorScheme: RideLauncher.colorScheme,
+    colorScheme: colorScheme,
     useMaterial3: true,
-    canvasColor: RideLauncher.colorScheme.primaryContainer,
+    canvasColor: colorScheme.primaryContainer,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
-        backgroundColor: RideLauncher.colorScheme.primary,
-        foregroundColor: RideLauncher.colorScheme.onPrimary,
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
         textStyle: const TextStyle(fontSize: 22),
       ),
     ),
-    floatingActionButtonTheme:
-        FloatingActionButtonThemeData(backgroundColor: colorScheme.secondary),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: colorScheme.secondary,
+      foregroundColor: colorScheme.onSecondary,
+    ),
     progressIndicatorTheme:
         const ProgressIndicatorThemeData(color: Color(0xff006874)),
     bottomAppBarTheme: BottomAppBarTheme(
-      color: RideLauncher.colorScheme.secondaryContainer,
+      color: colorScheme.secondaryContainer,
     ),
+    cardTheme: CardTheme(color: Colors.grey.shade600),
   );
   static final darkTheme = theme.copyWith(
     colorScheme: theme.colorScheme.copyWith(
       onSurface: Colors.grey.shade300,
+      onPrimaryContainer: Colors.grey.shade300,
     ),
     brightness: Brightness.dark,
     textTheme: TextTheme.lerp(
@@ -72,9 +78,11 @@ class RideLauncher extends StatefulWidget {
           theme.floatingActionButtonTheme.backgroundColor.darken(.3),
       foregroundColor: Colors.grey.shade100,
     ),
-    bottomAppBarTheme: theme.bottomAppBarTheme
-        .copyWith(color: RideLauncher.colorScheme.primary.darken(.3)),
+    bottomAppBarTheme:
+        theme.bottomAppBarTheme.copyWith(color: colorScheme.primary.darken(.3)),
     iconTheme: theme.iconTheme.copyWith(color: Colors.grey.shade300),
+    cardTheme:
+        theme.cardTheme.copyWith(color: theme.cardTheme.color.darken(.3)),
   );
 
   final ClientManager clientManager;
@@ -273,12 +281,20 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
               child: Row(
                 children: [
                   Expanded(
-                    child: Builder(
-                      builder: (context) => TemperatureControls(
-                        clientManager: widget.clientManager,
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        textStyle: Theme.of(context).textTheme.titleLarge,
-                      ),
+                    child: Row(
+                      children: [
+                        Builder(
+                          builder: (context) => TemperatureControls(
+                            clientManager: widget.clientManager,
+                            mainAxisAlignment: MainAxisAlignment.start,
+                            textStyle: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                        ClimateInfo(clientManager: widget.clientManager),
+                        Expanded(
+                          child: DriveInfo(clientManager: widget.clientManager),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 96.0 + 2 * 16.0),
@@ -295,6 +311,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 16.0),
                         VolumeControls(clientManager: widget.clientManager),
                       ],
                     ),
@@ -311,5 +328,109 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
             ),
           ),
         ),
+      );
+}
+
+class ClimateInfo extends StatelessWidget {
+  final ClientManager clientManager;
+  const ClimateInfo({super.key, required this.clientManager});
+
+  @override
+  Widget build(BuildContext context) => DefaultTextStyle(
+        style: Theme.of(context).textTheme.titleMedium!,
+        child: ListenableBuilder(
+          listenable: clientManager,
+          builder: (context, _) {
+            final climate = clientManager.vehicle.climate;
+            final exterior = climate.exterior, interior = climate.interior;
+            return Padding(
+              padding: exterior != null || interior != null
+                  ? const EdgeInsets.symmetric(horizontal: 8.0)
+                  : EdgeInsets.zero,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (exterior != null)
+                    Text('Ext: ${TemperatureControls.format(exterior)}'),
+                  if (interior != null)
+                    Text('Int: ${TemperatureControls.format(interior)}'),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+}
+
+class DriveInfo extends StatelessWidget {
+  final ClientManager clientManager;
+  const DriveInfo({super.key, required this.clientManager});
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: clientManager,
+        builder: (context, _) {
+          final drive = clientManager.vehicle.drive;
+
+          final destination = drive.destination,
+              minutesToArrival = drive.minutesToArrival,
+              milesToArrival = drive.milesToArrival;
+
+          String eta() {
+            final eta = DateTime.now().add(
+              Duration(
+                seconds:
+                    (minutesToArrival! * Duration.secondsPerMinute).toInt(),
+              ),
+            );
+            return '${(eta.hour - 1) % 12 + 1}:'
+                '${eta.minute.toString().padLeft(2, '0')} '
+                '${eta.hour < 12 ? 'a.m.' : 'p.m.'}';
+          }
+
+          final theme = Theme.of(context);
+
+          return destination == null &&
+                  milesToArrival == null &&
+                  minutesToArrival == null
+              ? const SizedBox()
+              : Card(
+                  margin: const EdgeInsets.only(left: 16.0),
+                  child: DefaultTextStyle(
+                    style: theme.textTheme.labelLarge!.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16.0,
+                        vertical: 8.0,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          if (destination != null)
+                            Text(destination, overflow: TextOverflow.ellipsis),
+                          if (minutesToArrival != null)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Text('ETA: ${eta()}'),
+                                Text('${minutesToArrival.round()} min'),
+                                if (milesToArrival != null)
+                                  Text(
+                                    '${milesToArrival.toStringAsFixed(milesToArrival >= 10 ? 0 : 1)} mi',
+                                  ),
+                              ],
+                            ),
+                          if (minutesToArrival == null &&
+                              milesToArrival != null)
+                            Text('Distance to destination: $milesToArrival mi'),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+        },
       );
 }

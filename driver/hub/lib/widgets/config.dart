@@ -78,10 +78,11 @@ class ConfigState extends State<Config> {
       teslaClient?.close();
       setState(() => teslaClient = null);
     } else if (serverManager.lifecycleState ==
-            core.ServerLifecycleState.started &&
-        teslaClient?.remote is! core.ServiceTeslaRemote) {
-      teslaClient?.close();
-      setState(() => teslaClient = tesla.Client(core.ServiceTeslaRemote()));
+        core.ServerLifecycleState.started) {
+      if (teslaClient?.remote is! core.ServiceTeslaRemote) {
+        teslaClient?.close();
+        setState(() => teslaClient = tesla.Client(core.ServiceTeslaRemote()));
+      }
     } else if (teslaClient?.remote is! tesla.Oauth2ClientRemote) {
       teslaClient?.close();
       setState(() => teslaClient = tesla.Client.oauth2(config));
