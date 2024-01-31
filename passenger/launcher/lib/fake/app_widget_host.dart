@@ -12,14 +12,14 @@ class FakeAppWidgetHost extends AppWidgetHostPlatform {
     int appWidgetId,
     ComponentName provider,
   ) async =>
-      false;
+      true;
 
   @override
   Future<bool> requestBindAppWidget(
     int appWidgetId,
     ComponentName provider,
   ) async =>
-      false;
+      true;
 
   @override
   Future<bool> configureAppWidget(int appWidgetId) async => true;

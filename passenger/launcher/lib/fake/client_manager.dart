@@ -41,6 +41,8 @@ class FakeClientManager extends ChangeNotifier implements ClientManager {
             'min': 15,
             'max': 28,
           },
+          'interior': 25,
+          'exterior': 25,
         },
         'volume': {
           'setting': 5,

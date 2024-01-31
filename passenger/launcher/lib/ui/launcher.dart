@@ -58,6 +58,7 @@ class RideLauncher extends StatefulWidget {
         const ProgressIndicatorThemeData(color: Color(0xff006874)),
     bottomAppBarTheme: BottomAppBarTheme(
       color: colorScheme.secondaryContainer,
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
     ),
     cardTheme: CardTheme(color: Colors.grey.shade600),
   );
@@ -297,7 +298,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 96.0 + 2 * 16.0),
+                  const SizedBox(width: 96.0 + 2 * 12.0),
                   Expanded(
                     child: Row(
                       children: [
@@ -311,7 +312,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 16.0),
+                        const SizedBox(width: 8.0),
                         VolumeControls(clientManager: widget.clientManager),
                       ],
                     ),
@@ -345,7 +346,7 @@ class ClimateInfo extends StatelessWidget {
             final exterior = climate.exterior, interior = climate.interior;
             return Padding(
               padding: exterior != null || interior != null
-                  ? const EdgeInsets.symmetric(horizontal: 8.0)
+                  ? const EdgeInsets.only(left: 8.0, right: 12.0)
                   : EdgeInsets.zero,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -396,7 +397,7 @@ class DriveInfo extends StatelessWidget {
                   minutesToArrival == null
               ? const SizedBox()
               : Card(
-                  margin: const EdgeInsets.only(left: 16.0),
+                  margin: const EdgeInsets.only(left: 8.0),
                   child: DefaultTextStyle(
                     style: theme.textTheme.labelLarge!.copyWith(
                       color: theme.colorScheme.onPrimaryContainer,

@@ -1,4 +1,5 @@
 import 'package:app_widget_host/app_widget_host.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -154,7 +155,12 @@ class _PersistentAppWidgetState extends State<PersistentAppWidget> {
       : bindingState == _BindingState.configured
           ? ClipRRect(
               borderRadius: widget.borderRadius,
-              child: AppWidgetHostView(appWidgetId: appWidgetId),
+              child: kIsWeb
+                  ? ColoredBox(
+                      color: Colors.grey.shade800,
+                      child: const SizedBox.expand(),
+                    )
+                  : AppWidgetHostView(appWidgetId: appWidgetId),
             )
           : Center(
               child: OutlinedButton(
