@@ -66,4 +66,22 @@ void main() {
       expect(server.transform(decoder), emits(message));
     });
   });
+
+  test('diffMessages', () {
+    expect(
+        diffMessages({
+          'volume': {
+            'setting': 0.0,
+            'meta': {'max': 10.0, 'step': 1.0}
+          }
+        }, {
+          'volume': {
+            'setting': null,
+            'meta': {'max': 10.0, 'step': 1.0}
+          }
+        }),
+        {
+          'volume': {'setting': null}
+        });
+  });
 }

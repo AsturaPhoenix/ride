@@ -1,5 +1,26 @@
 import 'model_link.dart';
 
+Map diffMessages(Map? before, Map after) {
+  final diff = {};
+
+  for (final MapEntry(:key, :value) in after.entries) {
+    final oldValue = before?[key];
+    if (oldValue is Map && value is Map) {
+      final valueDiff = diffMessages(oldValue, value);
+      if (valueDiff.isNotEmpty) {
+        diff[key] = valueDiff;
+      }
+    } else if (oldValue != value) {
+      diff[key] = value;
+      // A word of caution: this will not create a new key if the key was absent
+      // and the new value is null. There is no case today where this is needed
+      // though, since the serialized structure includes all known fields.
+    }
+  }
+
+  return diff;
+}
+
 class VehicleState {
   final ClimateState climate;
   final VolumeState volume;

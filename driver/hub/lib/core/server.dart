@@ -507,10 +507,12 @@ class Server extends ChangeNotifier {
 
               if (settings case {'temperature': final value as num}) {
                 updates['temperature'] = {'setting': value};
+                _lastVehicleBroadcast?['climate']['setting'] = value;
                 futures.add(vehicle.setTemperature(value.toDouble(), now));
               }
               if (settings case {'volume': final value as num}) {
                 updates['volume'] = {'setting': value};
+                _lastVehicleBroadcast?['volume']['setting'] = value;
                 futures.add(vehicle.setVolume(value.toDouble(), now));
               }
 
@@ -698,16 +700,28 @@ class Server extends ChangeNotifier {
     }
   }
 
+  Map? _lastVehicleBroadcast;
+
   void pushVehicle([
     Sink<Message>? connection,
   ]) {
     lastErrors.vehicle = null;
     notifyListeners();
 
+    final differential = connection == null;
+
     try {
       final vehicle = this.vehicle;
       if (vehicle != null) {
-        final message = ['vehicle', vehicle.state.toJson()];
+        Map data = vehicle.state.toJson();
+        if (differential) {
+          data = diffMessages(
+            _lastVehicleBroadcast,
+            _lastVehicleBroadcast = data,
+          );
+          if (data.isEmpty) return;
+        }
+        final message = ['vehicle', data];
 
         for (final connection
             in connection == null ? connections.keys : [connection]) {
