@@ -165,6 +165,10 @@ class Client extends ChangeNotifier {
   @pragma('vm:entry-point')
   static Future<void> main(ServiceInstance service) async {
     try {
+      // Start by releasing the device policy in case of previous unclean
+      // shutdown.
+      await releaseDevicePolicy();
+
       final listener = _ServiceListener(service);
       final config = await Config.load();
 
@@ -314,6 +318,12 @@ class Client extends ChangeNotifier {
     return completer.operation;
   }
 
+  static Future<void> applyDevicePolicy() =>
+      RideDevicePolicy.setScreenOffTimeout(const Duration(days: 1));
+
+  static Future<void> releaseDevicePolicy() =>
+      RideDevicePolicy.setScreenOffTimeout(const Duration(minutes: 2));
+
   final Config config;
   final Sink<Message> _socket;
   ClientListener? listener;
@@ -323,7 +333,6 @@ class Client extends ChangeNotifier {
   final _disconnected = Completer<void>();
   bool get isConnected => !_disconnected.isCompleted;
   Future<void> get disconnected => _disconnected.future;
-  Duration? _oldScreenOffTimeout;
 
   late final StreamSubscription _windowEventSubscription, _screenSubscription;
 
@@ -343,7 +352,7 @@ class Client extends ChangeNotifier {
     _send(['assets', config.assetsVersion]);
     _send(['vehicle']);
 
-    _applyDevicePolicy();
+    applyDevicePolicy();
 
     _windowEventSubscription = RideDevicePolicy.windowEvents
         .listen((event) => _send(['window', event]));
@@ -366,17 +375,7 @@ class Client extends ChangeNotifier {
     _windowEventSubscription.cancel();
     _screenSubscription.cancel();
     _socket.close();
-    _releaseDevicePolicy();
-  }
-
-  Future<void> _applyDevicePolicy() async {
-    _oldScreenOffTimeout = await RideDevicePolicy.getScreenOffTimeout();
-    await RideDevicePolicy.setScreenOffTimeout(const Duration(days: 1));
-  }
-
-  Future<void> _releaseDevicePolicy() async {
-    await RideDevicePolicy.setScreenOffTimeout(_oldScreenOffTimeout);
-    _oldScreenOffTimeout = null;
+    releaseDevicePolicy();
   }
 
   Future<void> _dispatch(Message args) async {
