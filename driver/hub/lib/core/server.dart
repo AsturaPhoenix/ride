@@ -681,7 +681,10 @@ class Server extends ChangeNotifier {
         vehicle = teslaClient == null
             ? null
             : tesla.Vehicle(
-                teslaClient!, config.vehicleId!, vehicleUpdateShadow);
+                teslaClient!,
+                config.vehicleId!,
+                vehicleUpdateShadow,
+              );
       }
 
       if (vehicle != oldVehicle || refresh) {

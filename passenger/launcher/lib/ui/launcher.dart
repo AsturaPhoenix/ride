@@ -1,16 +1,14 @@
 import 'dart:async';
 
-import 'package:app_widget_host/app_widget_host.dart';
 import 'package:async/async.dart';
 import 'package:flutter/material.dart';
 import 'package:ride_device_policy/ride_device_policy.dart';
 import 'package:spotify_sdk/spotify_sdk.dart';
 
 import '../core/client.dart';
+import 'bottom_bar.dart';
 import 'greetings.dart';
 import 'nav_tray.dart';
-import 'persistent_app_widget.dart';
-import 'vehicle_controls.dart';
 
 extension on Color? {
   Color? darken(double brightness) =>
@@ -279,46 +277,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
             bottomNavigationBar: BottomAppBar(
               height: RideLauncher.bottomAppBarHeight,
               shape: const CircularNotchedRectangle(),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Builder(
-                          builder: (context) => TemperatureControls(
-                            clientManager: widget.clientManager,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            textStyle: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        ClimateInfo(clientManager: widget.clientManager),
-                        Expanded(
-                          child: DriveInfo(clientManager: widget.clientManager),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 96.0 + 2 * 12.0),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          child: PersistentAppWidget(
-                            borderRadius:
-                                BorderRadius.all(Radius.circular(6.0)),
-                            provider: ComponentName(
-                              'com.spotify.music',
-                              'com.spotify.widget.widget.SpotifyWidget',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8.0),
-                        VolumeControls(clientManager: widget.clientManager),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+              child: BottomBarControls(clientManager: widget.clientManager),
             ),
             floatingActionButtonLocation:
                 FloatingActionButtonLocation.centerDocked,
@@ -329,109 +288,5 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
             ),
           ),
         ),
-      );
-}
-
-class ClimateInfo extends StatelessWidget {
-  final ClientManager clientManager;
-  const ClimateInfo({super.key, required this.clientManager});
-
-  @override
-  Widget build(BuildContext context) => DefaultTextStyle(
-        style: Theme.of(context).textTheme.titleMedium!,
-        child: ListenableBuilder(
-          listenable: clientManager,
-          builder: (context, _) {
-            final climate = clientManager.vehicle.climate;
-            final exterior = climate.exterior, interior = climate.interior;
-            return Padding(
-              padding: exterior != null || interior != null
-                  ? const EdgeInsets.only(left: 8.0, right: 12.0)
-                  : EdgeInsets.zero,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (exterior != null)
-                    Text('Ext: ${TemperatureControls.format(exterior)}'),
-                  if (interior != null)
-                    Text('Int: ${TemperatureControls.format(interior)}'),
-                ],
-              ),
-            );
-          },
-        ),
-      );
-}
-
-class DriveInfo extends StatelessWidget {
-  final ClientManager clientManager;
-  const DriveInfo({super.key, required this.clientManager});
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: clientManager,
-        builder: (context, _) {
-          final drive = clientManager.vehicle.drive;
-
-          final destination = drive.destination,
-              minutesToArrival = drive.minutesToArrival,
-              milesToArrival = drive.milesToArrival;
-
-          String eta() {
-            final eta = DateTime.now().add(
-              Duration(
-                seconds:
-                    (minutesToArrival! * Duration.secondsPerMinute).toInt(),
-              ),
-            );
-            return '${(eta.hour - 1) % 12 + 1}:'
-                '${eta.minute.toString().padLeft(2, '0')} '
-                '${eta.hour < 12 ? 'a.m.' : 'p.m.'}';
-          }
-
-          final theme = Theme.of(context);
-
-          return destination == null &&
-                  milesToArrival == null &&
-                  minutesToArrival == null
-              ? const SizedBox()
-              : Card(
-                  margin: const EdgeInsets.only(left: 8.0),
-                  child: DefaultTextStyle(
-                    style: theme.textTheme.labelLarge!.copyWith(
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16.0,
-                        vertical: 8.0,
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          if (destination != null)
-                            Text(destination, overflow: TextOverflow.ellipsis),
-                          if (minutesToArrival != null)
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                Text('ETA: ${eta()}'),
-                                Text('${minutesToArrival.round()} min'),
-                                if (milesToArrival != null)
-                                  Text(
-                                    '${milesToArrival.toStringAsFixed(milesToArrival >= 10 ? 0 : 1)} mi',
-                                  ),
-                              ],
-                            ),
-                          if (minutesToArrival == null &&
-                              milesToArrival != null)
-                            Text('Distance to destination: $milesToArrival mi'),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-        },
       );
 }
