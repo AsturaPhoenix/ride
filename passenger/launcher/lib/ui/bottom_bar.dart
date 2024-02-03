@@ -115,8 +115,11 @@ class DriveInfo extends StatelessWidget {
             ].join(' ');
           }
 
-          final String milesToArrival =
-              '${drive.milesToArrival!.toStringAsFixed(drive.milesToArrival! >= 10 || drive.milesToArrival! < 0.1 ? 0 : 1)} mi';
+          late final String milesToArrival;
+          if (drive.milesToArrival != null) {
+            milesToArrival =
+                '${drive.milesToArrival!.toStringAsFixed(drive.milesToArrival! >= 10 || drive.milesToArrival! < 0.1 ? 0 : 1)} mi';
+          }
 
           final theme = Theme.of(context);
 

@@ -104,7 +104,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
 
   bool softSleep = false;
 
-  late final AppLifecycleListener _appLifecycleListener;
+  AppLifecycleListener? _appLifecycleListener;
   Future<bool>? _spotifyRemoteConnect;
   CancelableOperation<void>? _spotifyKeepAlive;
 
@@ -160,9 +160,10 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
       await RideDevicePolicy.requestAdminIfNeeded();
       await RideDevicePolicy.requestAccessibilityIfNeeded();
 
+      if (!mounted) return;
+
       // The Spotify widget doesn't actually keep the service alive, so we need
       // to do it with a remote connection.
-
       _appLifecycleListener = AppLifecycleListener(
         onShow: () {
           widget.clientManager.showOverlays(false);
@@ -173,8 +174,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
           _spotifyKeepAlive?.cancel();
           _spotifyKeepAlive = null;
         },
-      );
-      _appLifecycleListener.onShow!();
+      )..onShow!();
     }();
   }
 
@@ -197,7 +197,7 @@ class _RideLauncherState extends State<RideLauncher> implements ClientListener {
 
   @override
   void dispose() {
-    _appLifecycleListener.dispose();
+    _appLifecycleListener?.dispose();
     _spotifyKeepAlive?.cancel();
     () async {
       if (await _spotifyRemoteConnect ?? false) {

@@ -1,10 +1,18 @@
+import 'package:app_widget_host/app_widget_host_platform_interface.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ride_launcher/fake/app_widget_host.dart';
 import 'package:ride_launcher/fake/device_apps.dart';
 
 import 'package:ride_launcher/ui/launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues(const {});
+    AppWidgetHostPlatform.instance = FakeAppWidgetHost();
+  });
+
   testWidgets('smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(RideLauncher());
   });
