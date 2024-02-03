@@ -32,4 +32,7 @@ class MethodChannelRideDevicePolicy extends RideDevicePolicyPlatform {
   Future<void> wakeUp() => methodChannel.invokeMethod('wakeUp');
   @override
   Future<void> lockNow() => methodChannel.invokeMethod('lockNow');
+  @override
+  Future<void> setVolume(double value) =>
+      methodChannel.invokeMethod('setVolume', value);
 }

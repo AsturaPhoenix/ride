@@ -6,6 +6,7 @@ import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioManager;
 import android.os.PowerManager;
 import android.provider.Settings;
 
@@ -41,10 +42,12 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
   private Context context;
   private ComponentName componentName;
   private DevicePolicyManager devicePolicyManager;
+  private AudioManager audioManager;
   private ActivityPluginBinding activityBinding;
 
   private Result activityResult;
   private PowerManager.WakeLock wakeLock;
+  private int maxVolume;
 
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
@@ -57,9 +60,12 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
 
     componentName = new ComponentName(context, getClass());
     devicePolicyManager = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
+    audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
 
     final PowerManager powerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
     wakeLock = powerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "RideDevicePolicyPlugin:wakeUp");
+
+    maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
   }
 
   @Override
@@ -212,6 +218,12 @@ public class RideDevicePolicyPlugin extends DeviceAdminReceiver
       }
       case "lockNow": {
         devicePolicyManager.lockNow();
+        result.success(null);
+        break;
+      }
+      case "setVolume": {
+        final double volume = call.arguments();
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (int)Math.ceil(volume * maxVolume), 0);
         result.success(null);
         break;
       }

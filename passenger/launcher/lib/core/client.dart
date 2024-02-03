@@ -417,8 +417,17 @@ class Client extends ChangeNotifier {
       case ['sleep']:
         await RideDevicePolicy.lockNow();
       case ['vehicle', final data as Map]:
-        vehicle.fromJson(data, UpdateDirection.fromUpstream);
-        notifyListeners();
+        {
+          final oldVolume = vehicle.volume.setting.value;
+          vehicle.fromJson(data, UpdateDirection.fromUpstream);
+          final newVolume = vehicle.volume.setting.value;
+          if (newVolume != oldVolume && newVolume != null) {
+            // I think we can ignore gating on the case where max volume
+            // changes.
+            _syncDeviceVolume();
+          }
+          notifyListeners();
+        }
     }
   }
 
@@ -440,5 +449,13 @@ class Client extends ChangeNotifier {
       'vehicle',
       {'volume': value},
     ]);
+    _syncDeviceVolume();
+  }
+
+  Future<void> _syncDeviceVolume() async {
+    final value = vehicle.volume.setting.value, max = vehicle.volume.meta.max;
+    if (value != null && max != null) {
+      await RideDevicePolicy.setVolume(value / max);
+    }
   }
 }

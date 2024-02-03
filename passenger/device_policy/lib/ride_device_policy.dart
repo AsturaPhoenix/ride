@@ -46,4 +46,6 @@ class RideDevicePolicy {
   static Future<void> home() => RideDevicePolicyPlatform.instance.home();
   static Future<void> wakeUp() => RideDevicePolicyPlatform.instance.wakeUp();
   static Future<void> lockNow() => RideDevicePolicyPlatform.instance.lockNow();
+  static Future<void> setVolume(double value) =>
+      RideDevicePolicyPlatform.instance.setVolume(value);
 }

@@ -32,4 +32,5 @@ abstract class RideDevicePolicyPlatform extends PlatformInterface {
   Future<void> home();
   Future<void> wakeUp();
   Future<void> lockNow();
+  Future<void> setVolume(double value);
 }
