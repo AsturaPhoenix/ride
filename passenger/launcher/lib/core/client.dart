@@ -314,6 +314,10 @@ class Client extends ChangeNotifier {
       final client = await retry(
         () => connect(config),
         retryIf: (_) => !completer.isCanceled,
+        delayFactor: const Duration(seconds: 1),
+        randomizationFactor: 0.0,
+        maxDelay: const Duration(seconds: 15),
+        maxAttempts: -1 >>> 1,
       );
       if (completer.isCanceled) {
         client.close();
