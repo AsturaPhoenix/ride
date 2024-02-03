@@ -209,13 +209,19 @@ class _SlideState extends State<Slide> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        AnimatedBuilder(
-          animation: animation,
-          builder: (context, _) => Image(
-            image: widget.image,
-            fit: BoxFit.none,
-            alignment:
-                Alignment.lerp(startAlignment, endAlignment, animation.value)!,
+        ExcludeSemantics(
+          child: AnimatedBuilder(
+            animation: animation,
+            builder: (context, _) => Image(
+              image: widget.image,
+              excludeFromSemantics: true,
+              fit: BoxFit.none,
+              alignment: Alignment.lerp(
+                startAlignment,
+                endAlignment,
+                animation.value,
+              )!,
+            ),
           ),
         ),
         Padding(
