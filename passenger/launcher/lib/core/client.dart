@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:isolate';
-import 'dart:ui';
 
 import 'package:archive/archive_io.dart';
 import 'package:async/async.dart';
@@ -183,8 +181,6 @@ class Client extends ChangeNotifier {
       Client? client;
       CancelableOperation<void>? connectionTask;
 
-      final overlayPorts = <String, SendPort?>{};
-
       CancelableOperation<void> maintainConnection() =>
           Client.connectWithRetry(config).thenOperation(
             (newClient, completer) async {
@@ -194,22 +190,13 @@ class Client extends ChangeNotifier {
               setStatus(ClientStatus.connected);
 
               newClient.addListener(
-                () {
-                  service.invoke(
-                    'syncState',
-                    ClientManagerState(
-                      status: status,
-                      vehicle: newClient.vehicle.toJson(),
-                    ).toJson(),
-                  );
-
-                  for (var MapEntry(key: portName, value: port)
-                      in overlayPorts.entries) {
-                    port ??= overlayPorts[portName] =
-                        IsolateNameServer.lookupPortByName(portName);
-                    port?.send(newClient.vehicle);
-                  }
-                },
+                () => service.invoke(
+                  'syncState',
+                  ClientManagerState(
+                    status: status,
+                    vehicle: newClient.vehicle.toJson(),
+                  ).toJson(),
+                ),
               );
 
               await newClient.disconnected;
