@@ -34,6 +34,36 @@ typedef ClientEvents = ({
   Stream? assets,
 });
 
+StreamSubscription<T> listenOnBackpressureBufferOne<T>(
+  Stream<T> stream,
+  Future<void> Function(T event) onData,
+) {
+  bool handling = false;
+  final buffer = <T>[];
+  return stream.listen((event) {
+    if (handling) {
+      buffer
+        ..clear()
+        ..add(event);
+    } else {
+      assert(buffer.isEmpty);
+      buffer.add(event);
+      void handleNext() =>
+        onData(buffer.removeLast())
+          .whenComplete(() {
+            if (buffer.isEmpty) {
+              handling = false;
+            } else {
+              handleNext();
+            }
+          });
+
+      handling = true;
+      handleNext();
+    }
+  });
+}
+
 class ClientManager extends ChangeNotifier {
   static Future<ClientManager> initialize() async {
     final service = FlutterBackgroundService();
@@ -185,36 +215,6 @@ class Client extends ChangeNotifier {
       Client? client;
       CancelableOperation<void>? connectionTask;
 
-      CancelableOperation<void> maintainConnection() =>
-          Client.connectWithRetry(config).thenOperation(
-            (newClient, completer) async {
-              newClient.listener = listener;
-
-              client = newClient;
-              setStatus(ClientStatus.connected);
-
-              newClient.addListener(
-                () => service.invoke(
-                  'syncState',
-                  ClientManagerState(
-                    status: status,
-                    vehicle: newClient.vehicle.toJson(),
-                  ).toJson(),
-                ),
-              );
-
-              await newClient.disconnected;
-              newClient.dispose();
-              client = null;
-              setStatus(ClientStatus.disconnected);
-
-              if (!completer.isCanceled) {
-                completer.completeOperation(maintainConnection());
-              }
-            },
-            onCancel: (completer) => client?.close(),
-          );
-
       final overlayWindows = [
         OverlayWindow.create(
           TemperatureControls.main,
@@ -248,12 +248,42 @@ class Client extends ChangeNotifier {
             ).toJson(),
           );
         }),
-        Connectivity().onConnectivityChanged.listen((connectivityResult) async {
+        listenOnBackpressureBufferOne(Connectivity().onConnectivityChanged,
+            (connectivityResult) async {
           await connectionTask?.cancel();
           connectionTask = null;
 
           if (connectivityResult == ConnectivityResult.wifi) {
-            connectionTask = maintainConnection();
+            connectionTask = maintainConnection(
+                () => connectWithRetry(() => connect(config)),
+                (connections) async {
+              await for (final newClient in connections) {
+                newClient.listener = listener;
+
+                client = newClient;
+                setStatus(ClientStatus.connected);
+
+                newClient.addListener(
+                  () => service.invoke(
+                    'syncState',
+                    ClientManagerState(
+                      status: status,
+                      vehicle: newClient.vehicle.toJson(),
+                    ).toJson(),
+                  ),
+                );
+
+                await applyDevicePolicy();
+
+                await newClient.disconnected;
+
+                newClient.dispose();
+                client = null;
+                setStatus(ClientStatus.disconnected);
+
+                await releaseDevicePolicy();
+              }
+            });
             setStatus(ClientStatus.connecting);
           } else {
             setStatus(ClientStatus.disconnected);
@@ -288,33 +318,89 @@ class Client extends ChangeNotifier {
     }
   }
 
-  static Future<Client> connect(
+  static CancelableOperation<Client> connect(
     Config config, [
     dynamic host,
     int? port,
-  ]) async {
-    host ??= await NetworkInfo().getWifiGatewayIP();
-    port ??= config.serverPort;
+  ]) {
+    ConnectionTask<Socket>? connectionTask;
+    late final Future<void> operation;
+    final completer = CancelableCompleter<Client>(
+      onCancel: () async {
+        connectionTask?.cancel();
+        await operation;
+      },
+    );
+    operation = () async {
+      try {
+        host ??= await NetworkInfo().getWifiGatewayIP();
+        port ??= config.serverPort;
+        if (completer.isCanceled) return;
 
-    return Client(config: config, socket: await Socket.connect(host, port));
+        connectionTask = await Socket.startConnect(host!, port!);
+        if (completer.isCanceled) return;
+
+        completer.complete(
+          Client(config: config, socket: await connectionTask!.socket),
+        );
+      } catch (e) {
+        completer.completeError(e);
+      }
+    }();
+    return completer.operation;
   }
 
-  static CancelableOperation<Client> connectWithRetry(Config config) {
-    final completer = CancelableCompleter<Client>();
-    completer.complete(() async {
-      final client = await retry(
-        () => connect(config),
+  static CancelableOperation<Client> connectWithRetry(
+    CancelableOperation<Client> Function() connect,
+  ) {
+    CancelableOperation<Client>? connectOperation;
+    final completer =
+        CancelableCompleter<Client>(onCancel: () => connectOperation?.cancel());
+    completer.complete(
+      retry(
+        () {
+          if (completer.isCanceled) {
+            return Completer<Client>().future;
+          } else {
+            connectOperation = connect();
+            return connectOperation!.value;
+          }
+        },
         retryIf: (_) => !completer.isCanceled,
         delayFactor: const Duration(seconds: 1),
         randomizationFactor: 0.0,
         maxDelay: const Duration(seconds: 15),
         maxAttempts: -1 >>> 1,
-      );
-      if (completer.isCanceled) {
-        client.close();
+      ),
+    );
+    return completer.operation;
+  }
+
+  static CancelableOperation<void> maintainConnection(
+    CancelableOperation<Client> Function() connect,
+    Future<void> Function(Stream<Client> connections) handler,
+  ) {
+    CancelableOperation<Client>? connectOperation;
+    late final Future<void> handlerOperation;
+    final completer = CancelableCompleter<void>(
+      onCancel: () async {
+        await connectOperation?.cancel();
+        try {
+          await handlerOperation;
+        } on Object {
+          // ignore
+        }
+      },
+    );
+    handlerOperation = handler(() async* {
+      while (!completer.isCanceled) {
+        connectOperation = connect();
+        yield (await connectOperation!.valueOrCancellation())!; // This last
+        // null check will fail on cancellation, but the error will be swallowed
+        // by onCancel above so it's fine.
       }
-      return client;
     }());
+    completer.complete(handlerOperation);
     return completer.operation;
   }
 
@@ -352,8 +438,6 @@ class Client extends ChangeNotifier {
     _send(['assets', config.assetsVersion]);
     _send(['vehicle']);
 
-    applyDevicePolicy();
-
     _windowEventSubscription = RideDevicePolicy.windowEvents
         .listen((event) => _send(['window', event]));
     _screenSubscription = Screen().screenStateStream!.listen(
@@ -371,11 +455,12 @@ class Client extends ChangeNotifier {
     );
   }
 
-  void close() {
+  @override
+  void dispose() {
     _windowEventSubscription.cancel();
     _screenSubscription.cancel();
     _socket.close();
-    releaseDevicePolicy();
+    super.dispose();
   }
 
   Future<void> _dispatch(Message args) async {
