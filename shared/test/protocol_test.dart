@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:ride_shared/protocol.dart';
 import 'package:test/test.dart';
 
@@ -83,5 +84,75 @@ void main() {
         {
           'volume': {'setting': null}
         });
+  });
+
+  group('model link', () {
+    const shadow = Duration(seconds: 20);
+
+    test('initialize from upstream', () {
+      final model = ModelLink(shadow);
+      model.fromUpstream(42);
+      expect(model.value, 42);
+    });
+
+    test('initialize from donwstream', () {
+      final model = ModelLink(shadow);
+      model.fromDownstream(42);
+      expect(model.value, 42);
+    });
+
+    test(
+        'downstream shadows upstream',
+        () => fakeAsync((async) {
+              final model = ModelLink(shadow);
+              model
+                ..fromDownstream(42)
+                ..fromUpstream(56);
+              expect(model.value, 42);
+
+              async.elapse(shadow - const Duration(milliseconds: 1));
+              model.fromUpstream(13);
+              expect(model.value, 42);
+
+              async.elapse(const Duration(milliseconds: 1));
+              model.fromUpstream(0);
+              expect(model.value, 0);
+            }));
+
+    test(
+        'downstream updates reset shadow',
+        () => fakeAsync((async) {
+              final model = ModelLink(shadow);
+              model.fromDownstream(42);
+
+              async.elapse(shadow ~/ 2);
+              model.fromDownstream(42);
+
+              async.elapse(shadow - const Duration(milliseconds: 1));
+              model.fromUpstream(56);
+              expect(model.value, 42);
+
+              async.elapse(const Duration(milliseconds: 1));
+              model.fromUpstream(0);
+              expect(model.value, 0);
+            }));
+
+    test(
+        'upstream does not shadow downstream',
+        () => fakeAsync((async) {
+              final model = ModelLink(shadow);
+              model
+                ..fromUpstream(42)
+                ..fromDownstream(56);
+              expect(model.value, 56);
+            }));
+
+    test('downstream does not shadow itself', () {
+      final model = ModelLink(shadow);
+      model
+        ..fromDownstream(42)
+        ..fromDownstream(56);
+      expect(model.value, 56);
+    });
   });
 }
