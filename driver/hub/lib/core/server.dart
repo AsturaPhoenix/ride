@@ -391,7 +391,7 @@ class Server extends ChangeNotifier {
         service.on('send').listen(
               (args) => server.send(
                 args!['message'] as Message,
-                args['ids'] as Iterable<String>?,
+                (args['ids'] as List?)?.cast(),
               ),
             ),
         service.on('teslaApi').listen((event) async {

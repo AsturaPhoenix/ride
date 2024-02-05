@@ -48,7 +48,7 @@ dependencies:
 
 dependency_overrides:
   flutter_background_service_android: 6.0.1 # Android 33 support
-  web: 0.4.0
+  web: 0.3.0
 
 dev_dependencies:
   flutter_test:

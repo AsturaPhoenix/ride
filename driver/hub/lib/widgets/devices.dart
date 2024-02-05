@@ -17,7 +17,7 @@ ColorFilter _colorFilterMultiply(Color color) => ColorFilter.matrix([
       //format: on
     ]);
 
-class Devices extends StatelessWidget {
+class Devices extends StatefulWidget {
   static String abbreviatePackageName(String packageName) =>
       packageName.splitMapJoin('.', onNonMatch: (s) => s.isEmpty ? '' : s[0]);
 
@@ -25,44 +25,75 @@ class Devices extends StatelessWidget {
   final OverlayWindow? overlayWindow;
   final ServerManager serverManager;
 
-  const Devices(
-      {super.key,
-      required this.serverManager,
-      this.config,
-      this.overlayWindow});
+  const Devices({
+    super.key,
+    required this.serverManager,
+    this.config,
+    this.overlayWindow,
+  });
+
+  @override
+  State<Devices> createState() => _DevicesState();
+}
+
+class _DevicesState extends State<Devices> {
+  final selected = <String>{};
+
+  void Function() send(void Function(List<String>? ids) handler) =>
+      () => handler(selected.isEmpty ? null : selected.toList(growable: false));
 
   @override
   Widget build(BuildContext context) {
-    List<Widget> deviceList() => [
-          if (serverManager.serverState != null)
-            for (final connection
-                in serverManager.serverState!.connections.values)
-              TweenAnimationBuilder(
-                tween: ColorTween(
-                  // Although ColorTween treats null as transparent,
-                  // TweenAnimationBuilder interprets it as meaning
-                  // the animation should start at the end value.
-                  begin: Colors.white.withOpacity(0.0),
-                  end:
-                      connection.screenOn != false ? Colors.white : Colors.grey,
-                ),
-                duration: const Duration(milliseconds: 250),
-                builder: (context, value, child) => ColorFiltered(
-                  colorFilter: _colorFilterMultiply(value!),
-                  child: child,
-                ),
-                child: CircleAvatar(
-                  backgroundColor: Colors.grey.shade300,
-                  child: connection.foregroundPackage == null
-                      ? null
-                      : Text(
-                          abbreviatePackageName(
+    List<Widget> deviceList() {
+      if (widget.serverManager.serverState == null) {
+        selected.clear();
+        return [];
+      }
+
+      // When we rebuild, we want to make sure we don't keep any IDs selected
+      // that we lose the UI to deselect.
+      selected.retainAll(widget.serverManager.serverState!.connections.keys);
+
+      return [
+        for (final MapEntry(key: id, value: connection)
+            in widget.serverManager.serverState!.connections.entries)
+          TweenAnimationBuilder(
+            tween: ColorTween(
+              // Although ColorTween treats null as transparent,
+              // TweenAnimationBuilder interprets it as meaning
+              // the animation should start at the end value.
+              begin: Colors.white.withOpacity(0.0),
+              end: connection.screenOn != false ? Colors.white : Colors.grey,
+            ),
+            duration: const Duration(milliseconds: 250),
+            builder: (context, value, child) => ColorFiltered(
+              colorFilter: _colorFilterMultiply(value!),
+              child: child,
+            ),
+            child: Material(
+              color: Colors.grey.shade300,
+              shadowColor: Colors.blue,
+              surfaceTintColor: Colors.white,
+              shape: const CircleBorder(),
+              clipBehavior: Clip.hardEdge,
+              elevation: selected.contains(id) ? 4.0 : 0.0,
+              child: InkWell(
+                onTap: () =>
+                    setState(() => selected.remove(id) || selected.add(id)),
+                child: connection.foregroundPackage == null
+                    ? null
+                    : Center(
+                        child: Text(
+                          Devices.abbreviatePackageName(
                             connection.foregroundPackage!,
                           ),
                         ),
-                ),
+                      ),
               ),
-        ];
+            ),
+          ),
+      ];
+    }
 
     List<Widget> controls() => [
           const SizedBox(height: 16.0),
@@ -73,7 +104,7 @@ class Devices extends StatelessWidget {
             child: Row(
               children: [
                 IconButton.outlined(
-                  style: overlayWindow == null
+                  style: widget.overlayWindow == null
                       ? null
                       : const ButtonStyle(
                           backgroundColor:
@@ -81,26 +112,26 @@ class Devices extends StatelessWidget {
                         ),
                   icon: const Icon(Icons.light_mode),
                   tooltip: 'Wake',
-                  onPressed: serverManager.wake,
+                  onPressed: send(widget.serverManager.wake),
                 ),
                 const SizedBox(width: 8.0),
                 IconButton.filledTonal(
                   icon: const Icon(Icons.home),
                   tooltip: 'Home',
-                  onPressed: serverManager.home,
+                  onPressed: send(widget.serverManager.home),
                 ),
                 const SizedBox(width: 8.0),
                 IconButton.filled(
                   icon: const Icon(Icons.dark_mode),
                   tooltip: 'Sleep',
-                  onPressed: serverManager.sleep,
+                  onPressed: send(widget.serverManager.sleep),
                 ),
               ],
             ),
           ),
         ];
 
-    return overlayWindow == null
+    return widget.overlayWindow == null
         ? Padding(
             padding: const EdgeInsets.only(
               left: 24.0,
@@ -116,7 +147,7 @@ class Devices extends StatelessWidget {
                     width: 160.0,
                     height: 160.0,
                     child: ListenableBuilder(
-                      listenable: serverManager,
+                      listenable: widget.serverManager,
                       builder: (context, _) => GridView.count(
                         crossAxisCount: 2,
                         padding: const EdgeInsets.all(8.0),
@@ -132,23 +163,24 @@ class Devices extends StatelessWidget {
             ),
           )
         : ListenableBuilder(
-            listenable: serverManager,
+            listenable: widget.serverManager,
             builder: (context, child) {
-              if (serverManager.serverState?.connections.isEmpty ?? true) {
-                overlayWindow!.update(const WindowParams(height: 0));
+              if (widget.serverManager.serverState?.connections.isEmpty ??
+                  true) {
+                widget.overlayWindow!.update(const WindowParams(height: 0));
                 return const SizedBox();
               }
 
               final dpr = MediaQuery.devicePixelRatioOf(context);
 
               final children = deviceList();
-              overlayWindow!.update(
+              widget.overlayWindow!.update(
                 WindowParams(
                   // TODO: This update can conflict with and override the
                   // positioning update done by the drag handle, so we need to
                   // set the position here as well.
-                  x: -(config!.overlayPosition.dx * dpr).round(),
-                  y: (config!.overlayPosition.dy * dpr).round(),
+                  x: -(widget.config!.overlayPosition.dx * dpr).round(),
+                  y: (widget.config!.overlayPosition.dy * dpr).round(),
                   height:
                       (((children.length / 2).ceil() * 82 + 80) * dpr).ceil(),
                   width: (160 * dpr).ceil(),
@@ -157,7 +189,10 @@ class Devices extends StatelessWidget {
 
               return Column(
                 children: [
-                  DragHandle(config: config!, window: overlayWindow!),
+                  DragHandle(
+                    config: widget.config!,
+                    window: widget.overlayWindow!,
+                  ),
                   SizedBox(
                     width: double.infinity,
                     child: Wrap(
