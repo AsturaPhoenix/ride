@@ -209,22 +209,33 @@ class Vehicle {
     _set(response);
   }
 
+  static void _handlePostResponse(Map<String, dynamic> response) {
+    if (response
+        case {'response': {'result': false, 'reason': final String reason}}) {
+      throw reason;
+    }
+  }
+
   Future<void> setTemperature(double value, [DateTime? now]) async {
     state.climate.setting.fromDownstream(value, now);
     await _throttle.temperature.add(
-      () => client._call('POST', '$baseEndpoint/command/set_temps', {
-        'driver_temp': value,
-        'passenger_temp': value,
-      }),
+      () async => _handlePostResponse(
+        await client._call('POST', '$baseEndpoint/command/set_temps', {
+          'driver_temp': value,
+          'passenger_temp': value,
+        }),
+      ),
     );
   }
 
   Future<void> setVolume(double value, [DateTime? now]) async {
     state.volume.setting.fromDownstream(value, now);
     await _throttle.volume.add(
-      () => client._call('POST', '$baseEndpoint/command/adjust_volume', {
-        'volume': value,
-      }),
+      () async => _handlePostResponse(
+        await client._call('POST', '$baseEndpoint/command/adjust_volume', {
+          'volume': value,
+        }),
+      ),
     );
   }
 }
