@@ -24,6 +24,14 @@ class MethodChannelOverlayWindow extends OverlayWindowPlatform {
       ];
 
   @override
+  Future<bool> requestPermissions() async =>
+      await methodChannel.invokeMethod('requestPermissions') as bool;
+
+  @override
+  Future<bool> hasPermissions() async =>
+      await methodChannel.invokeMethod('hasPermissions') as bool;
+
+  @override
   Future<int> createWindow(Entrypoint entrypoint, WindowParams params) async {
     final entrypointHandle = PluginUtilities.getCallbackHandle(entrypoint);
     if (entrypointHandle == null) {

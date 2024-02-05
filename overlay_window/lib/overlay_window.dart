@@ -220,6 +220,11 @@ class OverlayWindow {
   Future<void> destroy() =>
       OverlayWindowPlatform.instance.destroyWindow(_handle);
 
+  static Future<bool> requestPermissions() =>
+      OverlayWindowPlatform.instance.requestPermissions();
+  static Future<bool> hasPermissions() =>
+      OverlayWindowPlatform.instance.hasPermissions();
+
   static Future<OverlayWindow> create(
           Entrypoint entrypoint, WindowParams params) async =>
       OverlayWindow.forHandle(await OverlayWindowPlatform.instance

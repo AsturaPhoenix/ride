@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:ride_shared/defaults.dart' as defaults;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,7 +8,8 @@ class Config {
       assetsVersionKey = 'assets version',
       portKey = 'boot',
       teslaCredentialsKey = 'tesla.credentials',
-      teslaVehicleKey = 'tesla.vehicle';
+      teslaVehicleKey = 'tesla.vehicle',
+      overlayPositionKey = 'overlay position';
 
   final SharedPreferences _sharedPreferences;
 
@@ -41,6 +44,15 @@ class Config {
       _sharedPreferences.setInt(teslaVehicleKey, value);
     }
   }
+
+  Offset get overlayPosition => Offset(
+        _sharedPreferences.getDouble('$overlayPositionKey.x') ?? 16.0,
+        _sharedPreferences.getDouble('$overlayPositionKey.y') ?? 0.0,
+      );
+
+  set overlayPosition(Offset value) => _sharedPreferences
+    ..setDouble('$overlayPositionKey.x', value.dx)
+    ..setDouble('$overlayPositionKey.y', value.dy);
 
   const Config(this._sharedPreferences);
   static Future<Config> load() async =>

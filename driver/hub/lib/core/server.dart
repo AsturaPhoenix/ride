@@ -5,9 +5,11 @@ import 'package:async/async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:http/http.dart' as http;
+import 'package:overlay_window/overlay_window.dart';
 import 'package:ride_shared/protocol.dart';
 import 'package:uri_to_file/uri_to_file.dart';
 
+import '../widgets/overlay.dart';
 import 'config.dart';
 import 'tesla.dart' as tesla;
 
@@ -178,6 +180,13 @@ class ServerManager extends ChangeNotifier {
         'message': message,
         'ids': ids,
       });
+
+  void showOverlay(bool show) {
+    // Don't bother if the server's not running.
+    if (show && serverState == null) return;
+
+    FlutterBackgroundService().invoke('showOverlay', {'visible': show});
+  }
 }
 
 class ServerErrors {
@@ -356,6 +365,23 @@ class Server extends ChangeNotifier {
       // Send initial state for the actual port number, if configured as 0.
       syncState();
 
+      final overlay = (() async {
+        if (await OverlayWindow.hasPermissions()) {
+          final overlay = await OverlayWindow.create(
+            RideHubOverlay.main,
+            const WindowParams(
+              gravity: Gravity.top | Gravity.right,
+              width: 0,
+              height: 0,
+            ),
+          );
+          await overlay.setVisibility(OverlayWindow.gone);
+          return overlay;
+        } else {
+          return null;
+        }
+      })();
+
       final subscriptions = [
         service.on('syncState').listen((_) => syncState()),
         service.on('pushAssets').listen((_) => server.pushAssets()),
@@ -394,12 +420,19 @@ class Server extends ChangeNotifier {
             });
           }
         }),
+        service.on('showOverlay').listen((args) {
+          final visibility = args!['visible'] as bool
+              ? OverlayWindow.visible
+              : OverlayWindow.gone;
+          (() async => (await overlay)?.setVisibility(visibility))();
+        }),
       ];
 
       await service.on('stop').first;
 
       await Future.wait([
         for (final subscription in subscriptions) subscription.cancel(),
+        (() async => (await overlay)?.destroy())(),
       ]);
 
       await server.close();

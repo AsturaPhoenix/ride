@@ -7,18 +7,20 @@ void main() {
 }
 
 class RideHub extends StatelessWidget {
+  static final theme = ThemeData(
+    colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
+    useMaterial3: true,
+    listTileTheme: const ListTileThemeData(
+      contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
+    ),
+  );
+
   const RideHub({super.key});
 
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'RIDE',
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.white),
-          useMaterial3: true,
-          listTileTheme: const ListTileThemeData(
-            contentPadding: EdgeInsets.symmetric(horizontal: 16.0),
-          ),
-        ),
+        theme: theme,
         home: Scaffold(
           appBar: AppBar(title: const Text('RIDE Hub')),
           body: const Config(),

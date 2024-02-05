@@ -76,4 +76,7 @@ class FakeServerManager extends ChangeNotifier implements ServerManager {
 
   @override
   void updateVehicle({bool refresh = false}) {}
+
+  @override
+  void showOverlay(bool show) {}
 }

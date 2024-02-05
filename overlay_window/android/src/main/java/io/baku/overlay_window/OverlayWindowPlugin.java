@@ -3,14 +3,20 @@ package io.baku.overlay_window;
 import static android.view.WindowManager.LayoutParams.*;
 
 import android.accessibilityservice.AccessibilityService;
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.PixelFormat;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,11 +42,15 @@ import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
+import io.flutter.plugin.common.PluginRegistry;
 
 /**
  * OverlayWindowPlugin
  */
-public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, ServiceAware, ActivityAware {
+public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, ServiceAware, ActivityAware, PluginRegistry.ActivityResultListener {
+  private static final int
+      REQUEST_CODE_ENABLE_OVERLAYS = 0x20;
+
   /**
    * Set this to elevate overlay windows to accessibility overlays, which are necessary to receive
    * touch events over some navigation bars.
@@ -90,6 +100,8 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
   private static int nextHandle;
   private static final Map<Integer, Window> windows = new HashMap<>();
 
+  private Result activityResult;
+
   @Override
   public void onAttachedToEngine(@NonNull FlutterPluginBinding flutterPluginBinding) {
     channel = new MethodChannel(flutterPluginBinding.getBinaryMessenger(), "overlay_window");
@@ -137,11 +149,37 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
       }
 
       switch (call.method) {
+        case "requestPermissions":
+          if (Build.VERSION.SDK_INT >= 23) {
+            if (activityBinding == null) {
+              result.error("failed", "Result callback requires an activity.", null);
+              return;
+            }
+
+            if (activityResult != null) {
+              throw new IllegalStateException("Unexpected uncompleted activity result.");
+            }
+            activityResult = result;
+
+            if (!Settings.canDrawOverlays(context)) {
+              final Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                  Uri.parse("package:" + context.getPackageName()));
+              activityBinding.getActivity().startActivityForResult(intent, REQUEST_CODE_ENABLE_OVERLAYS);
+            }
+          } else {
+            result.success(true);
+          }
+          break;
+        case "hasPermissions":
+          result.success(Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(context));
+          break;
         case "createWindow": {
           final List<Number> arguments = call.arguments();
           final long entrypoint = arguments.get(0).longValue();
           final LayoutParams params = new LayoutParams(
-              accessibilityService == null ? TYPE_SYSTEM_ALERT : TYPE_ACCESSIBILITY_OVERLAY,
+              accessibilityService != null && Build.VERSION.SDK_INT >= 22 ?
+                  TYPE_ACCESSIBILITY_OVERLAY :
+                  Build.VERSION.SDK_INT >= 26 ? TYPE_APPLICATION_OVERLAY : TYPE_SYSTEM_ALERT,
               FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL,
               PixelFormat.TRANSLUCENT
           );
@@ -241,6 +279,28 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
   }
 
   @Override
+  public boolean onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+    switch (requestCode) {
+      case REQUEST_CODE_ENABLE_OVERLAYS:
+        switch (resultCode) {
+          case Activity.RESULT_OK:
+            activityResult.success(true);
+            break;
+          case Activity.RESULT_CANCELED:
+            activityResult.success(false);
+            break;
+          default:
+            activityResult.error(Integer.toString(resultCode), "Exceptional activity result.", data.toString());
+            break;
+        }
+        activityResult = null;
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  @Override
   public void onDetachedFromEngine(@NonNull FlutterPluginBinding binding) {
     synchronized (windows) {
       taskQueue = null;
@@ -296,6 +356,7 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
         }
       }
     }
+    binding.addActivityResultListener(this);
   }
 
   @Override

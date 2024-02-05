@@ -32,6 +32,8 @@ abstract class OverlayWindowPlatform extends PlatformInterface {
     _instance = instance;
   }
 
+  Future<bool> requestPermissions();
+  Future<bool> hasPermissions();
   Future<int> createWindow(Entrypoint entrypoint, WindowParams params);
   Future<void> updateWindow(int handle, WindowParams params);
   Future<void> setVisibility(int handle, int visibility);
