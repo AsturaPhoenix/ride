@@ -5,17 +5,7 @@ import 'package:overlay_window/overlay_window.dart';
 
 import '../core/config.dart' as core;
 import '../core/server.dart';
-
-// I think this should be equivalent to
-// ColorFilter.mode(color, BlendMode.multiply), but for some reason it's not.
-ColorFilter _colorFilterMultiply(Color color) => ColorFilter.matrix([
-      //format: off
-      color.red / 255, 0, 0, 0, 0,
-      0, color.green / 255, 0, 0, 0,
-      0, 0, color.blue / 255, 0, 0,
-      0, 0, 0, color.alpha / 255, 0,
-      //format: on
-    ]);
+import '../main.dart';
 
 class Devices extends StatefulWidget {
   static String abbreviatePackageName(String packageName) =>
@@ -37,61 +27,78 @@ class Devices extends StatefulWidget {
 }
 
 class _DevicesState extends State<Devices> {
-  final selected = <String>{};
+  final selectedIds = <String>{};
 
-  void Function() send(void Function(List<String>? ids) handler) =>
-      () => handler(selected.isEmpty ? null : selected.toList(growable: false));
+  void Function() send(void Function(List<String>? ids) handler) => () {
+        handler(
+          selectedIds.isEmpty ? null : selectedIds.toList(growable: false),
+        );
+        // It's convenient in the common usage pattern to clear the selection
+        // after sending a command; targeted commands tend to be one-off.
+        setState(selectedIds.clear);
+      };
 
   @override
   Widget build(BuildContext context) {
     List<Widget> deviceList() {
       if (widget.serverManager.serverState == null) {
-        selected.clear();
+        selectedIds.clear();
         return [];
       }
 
       // When we rebuild, we want to make sure we don't keep any IDs selected
       // that we lose the UI to deselect.
-      selected.retainAll(widget.serverManager.serverState!.connections.keys);
+      // It could be more efficient to do this in the send handler.
+      selectedIds.retainAll(widget.serverManager.serverState!.connections.keys);
 
       return [
         for (final MapEntry(key: id, value: connection)
             in widget.serverManager.serverState!.connections.entries)
-          TweenAnimationBuilder(
-            tween: ColorTween(
-              // Although ColorTween treats null as transparent,
-              // TweenAnimationBuilder interprets it as meaning
-              // the animation should start at the end value.
-              begin: Colors.white.withOpacity(0.0),
-              end: connection.screenOn != false ? Colors.white : Colors.grey,
-            ),
-            duration: const Duration(milliseconds: 250),
-            builder: (context, value, child) => ColorFiltered(
-              colorFilter: _colorFilterMultiply(value!),
-              child: child,
-            ),
-            child: Material(
-              color: Colors.grey.shade300,
-              shadowColor: Colors.blue,
-              surfaceTintColor: Colors.white,
-              shape: const CircleBorder(),
-              clipBehavior: Clip.hardEdge,
-              elevation: selected.contains(id) ? 4.0 : 0.0,
-              child: InkWell(
-                onTap: () =>
-                    setState(() => selected.remove(id) || selected.add(id)),
-                child: connection.foregroundPackage == null
-                    ? null
-                    : Center(
-                        child: Text(
-                          Devices.abbreviatePackageName(
-                            connection.foregroundPackage!,
+          () {
+            final selected = selectedIds.contains(id);
+
+            return FadeIn(
+              child: Material(
+                type: MaterialType.circle,
+                color: Colors.grey.shade300,
+                shadowColor: Colors.blue,
+                surfaceTintColor: Colors.white,
+                clipBehavior: Clip.hardEdge,
+                elevation: selected ? 2.0 : 0.0,
+                child: InkWell(
+                  onTap: () => setState(
+                    () => (selected ? selectedIds.remove : selectedIds.add)(id),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      AnimatedOpacity(
+                        opacity: connection.screenOn ?? true ? 0.0 : 1.0,
+                        duration: const Duration(milliseconds: 250),
+                        child: const ColoredBox(color: Colors.black54),
+                      ),
+                      if (connection.foregroundPackage != null)
+                        Center(
+                          child: Text(
+                            Devices.abbreviatePackageName(
+                              connection.foregroundPackage!,
+                            ),
                           ),
                         ),
+                      AnimatedOpacity(
+                        opacity: selected ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 250),
+                        child: ColoredBox(
+                          color: RideHub.theme.primaryColor.withOpacity(.25),
+                          child: const Icon(Icons.check),
+                        ),
                       ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          }(),
       ];
     }
 
@@ -270,4 +277,45 @@ class _DragHandleState extends State<DragHandle> {
         onPanEnd: (_) => widget.config.overlayPosition = _target,
         child: const Icon(Icons.drag_handle),
       );
+}
+
+class FadeIn extends StatefulWidget {
+  final Duration duration;
+  final Widget child;
+
+  const FadeIn({
+    super.key,
+    this.duration = const Duration(milliseconds: 250),
+    required this.child,
+  });
+
+  @override
+  State<StatefulWidget> createState() => _FadeInState();
+}
+
+class _FadeInState extends State<FadeIn> with SingleTickerProviderStateMixin {
+  late final AnimationController animation;
+
+  @override
+  void initState() {
+    super.initState();
+    animation = AnimationController(vsync: this, duration: widget.duration)
+      ..forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant FadeIn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    animation.duration = widget.duration;
+  }
+
+  @override
+  void dispose() {
+    animation.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FadeTransition(opacity: animation, child: widget.child);
 }
