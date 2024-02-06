@@ -14,13 +14,14 @@ void overlayMain(List<String> args) => PluginUtilities.getCallbackFromHandle(
 class MethodChannelOverlayWindow extends OverlayWindowPlatform {
   static const methodChannel = MethodChannel('overlay_window');
 
-  static List<int?> serializeParams(WindowParams params) => [
+  static List<num?> serializeParams(WindowParams params) => [
         params.flags,
         params.gravity,
         params.x,
         params.y,
         params.width,
         params.height,
+        params.alpha,
       ];
 
   @override

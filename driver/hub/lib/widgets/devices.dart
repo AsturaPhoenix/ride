@@ -174,7 +174,13 @@ class _DevicesState extends State<Devices> {
             builder: (context, child) {
               if (widget.serverManager.serverState?.connections.isEmpty ??
                   true) {
-                widget.overlayWindow!.update(const WindowParams(height: 0));
+                widget.overlayWindow!.update(
+                  const WindowParams(
+                    flags: Flag.notFocusable | Flag.notTouchable,
+                    height: 0,
+                    alpha: 0.0,
+                  ),
+                );
                 return const SizedBox();
               }
 
@@ -183,6 +189,7 @@ class _DevicesState extends State<Devices> {
               final children = deviceList();
               widget.overlayWindow!.update(
                 WindowParams(
+                  flags: Flag.defaultFlags,
                   // TODO: This update can conflict with and override the
                   // positioning update done by the drag handle, so we need to
                   // set the position here as well.
@@ -191,6 +198,7 @@ class _DevicesState extends State<Devices> {
                   height:
                       (((children.length / 2).ceil() * 82 + 80) * dpr).ceil(),
                   width: (160 * dpr).ceil(),
+                  alpha: .75,
                 ),
               );
 

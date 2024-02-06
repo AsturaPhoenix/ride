@@ -34,12 +34,9 @@ class RideHubOverlay extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Opacity(
-        opacity: 0.75,
-        child: Devices(
-          serverManager: serverManager,
-          config: config,
-          overlayWindow: window,
-        ),
+  Widget build(BuildContext context) => Devices(
+        serverManager: serverManager,
+        config: config,
+        overlayWindow: window,
       );
 }

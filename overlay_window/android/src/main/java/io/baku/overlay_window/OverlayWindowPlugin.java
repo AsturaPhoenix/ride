@@ -88,6 +88,9 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
     if (serializedParams.get(5) != null) {
       params.height = serializedParams.get(5).intValue();
     }
+    if (serializedParams.get(6) != null) {
+      params.alpha = serializedParams.get(6).floatValue();
+    }
   }
 
   private MethodChannel channel;
@@ -183,7 +186,7 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
               FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL,
               PixelFormat.TRANSLUCENT
           );
-          applyParams(params, arguments.subList(1, 7));
+          applyParams(params, arguments.subList(1, 8));
 
           final Window window = new Window(
               this,
@@ -225,7 +228,7 @@ public class OverlayWindowPlugin implements FlutterPlugin, MethodCallHandler, Se
           }
 
           final LayoutParams params = (LayoutParams) window.view.getLayoutParams();
-          applyParams(params, arguments.subList(1, 7));
+          applyParams(params, arguments.subList(1, 8));
           windowManager.updateViewLayout(window.view, params);
 
           result.success(null);
