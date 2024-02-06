@@ -48,9 +48,7 @@ StreamSubscription<T> listenOnBackpressureBufferOne<T>(
     } else {
       assert(buffer.isEmpty);
       buffer.add(event);
-      void handleNext() =>
-        onData(buffer.removeLast())
-          .whenComplete(() {
+      void handleNext() => onData(buffer.removeLast()).whenComplete(() {
             if (buffer.isEmpty) {
               handling = false;
             } else {
@@ -256,33 +254,31 @@ class Client extends ChangeNotifier {
           if (connectivityResult == ConnectivityResult.wifi) {
             connectionTask = maintainConnection(
                 () => connectWithRetry(() => connect(config)),
-                (connections) async {
-              await for (final newClient in connections) {
-                newClient.listener = listener;
+                (newClient) async {
+              newClient.listener = listener;
 
-                client = newClient;
-                setStatus(ClientStatus.connected);
+              client = newClient;
+              setStatus(ClientStatus.connected);
 
-                newClient.addListener(
-                  () => service.invoke(
-                    'syncState',
-                    ClientManagerState(
-                      status: status,
-                      vehicle: newClient.vehicle.toJson(),
-                    ).toJson(),
-                  ),
-                );
+              newClient.addListener(
+                () => service.invoke(
+                  'syncState',
+                  ClientManagerState(
+                    status: status,
+                    vehicle: newClient.vehicle.toJson(),
+                  ).toJson(),
+                ),
+              );
 
-                await applyDevicePolicy();
+              await applyDevicePolicy();
 
-                await newClient.disconnected;
+              await newClient.disconnected;
 
-                newClient.dispose();
-                client = null;
-                setStatus(ClientStatus.disconnected);
+              newClient.dispose();
+              client = null;
+              setStatus(ClientStatus.disconnected);
 
-                await releaseDevicePolicy();
-              }
+              await releaseDevicePolicy();
             });
             setStatus(ClientStatus.connecting);
           } else {
@@ -378,7 +374,7 @@ class Client extends ChangeNotifier {
 
   static CancelableOperation<void> maintainConnection(
     CancelableOperation<Client> Function() connect,
-    Future<void> Function(Stream<Client> connections) handler,
+    Future<void> Function(Client client) handler,
   ) {
     CancelableOperation<Client>? connectOperation;
     late final Future<void> handlerOperation;
@@ -392,14 +388,20 @@ class Client extends ChangeNotifier {
         }
       },
     );
-    handlerOperation = handler(() async* {
+    handlerOperation = () async {
       while (!completer.isCanceled) {
         connectOperation = connect();
-        yield (await connectOperation!.valueOrCancellation())!; // This last
-        // null check will fail on cancellation, but the error will be swallowed
-        // by onCancel above so it's fine.
+
+        try {
+          final client = await connectOperation!.valueOrCancellation();
+          if (client != null) {
+            await handler(client);
+          }
+        } catch (e, s) {
+          Zone.current.handleUncaughtError(e, s);
+        }
       }
-    }());
+    }();
     completer.complete(handlerOperation);
     return completer.operation;
   }

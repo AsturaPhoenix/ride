@@ -25,7 +25,7 @@ void main() {
                       () => CancelableCompleter<Client>(
                           onCancel: () => cancelCompleter.future).operation,
                     ),
-                (connections) => connections.drain());
+                (_) async {});
             async.flushMicrotasks();
 
             final cancel = Monitor(operation.cancel());
@@ -44,11 +44,7 @@ void main() {
             final handlerCompleter = Completer<void>();
             final operation = Client.maintainConnection(
                 () => CancelableOperation.fromValue(FakeClient()),
-                (connections) async {
-              await for (final _ in connections) {
-                await handlerCompleter.future;
-              }
-            });
+                (client) => handlerCompleter.future);
             async.flushMicrotasks();
 
             final cancel = Monitor(operation.cancel());
@@ -70,7 +66,7 @@ void main() {
                       () => (connectCompleter = CancelableCompleter<Client>())
                           .operation,
                     ),
-                (connections) => connections.drain());
+                (_) async {});
             async.flushMicrotasks();
 
             connectCompleter!.completeError(Exception());
@@ -109,4 +105,28 @@ void main() {
     handlerCompleter!.complete();
     expect(await eventCompleter.future, 2);
   });
+
+  test(
+      'Continues if handler throws',
+      () => fakeAsync((async) {
+            Completer<void>? handlerCompleter;
+            Object? error;
+            runZonedGuarded(
+                () => Client.maintainConnection(
+                        () => CancelableOperation.fromValue(FakeClient()),
+                        (client) {
+                      expect(handlerCompleter, isNull);
+                      handlerCompleter = Completer<void>();
+                      return handlerCompleter!.future;
+                    }),
+                (e, _) => error = e);
+
+            async.flushMicrotasks();
+            handlerCompleter!.completeError('foo');
+            handlerCompleter = null;
+
+            async.flushMicrotasks();
+            expect(error, 'foo');
+            expect(handlerCompleter, isNotNull);
+          }));
 }
