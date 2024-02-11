@@ -254,7 +254,7 @@ class Client extends ChangeNotifier {
           if (connectivityResult == ConnectivityResult.wifi) {
             connectionTask = maintainConnection(
                 () => connectWithRetry(() => connect(config)),
-                (newClient) async {
+                (newClient, cancelled) async {
               newClient.listener = listener;
 
               client = newClient;
@@ -272,7 +272,7 @@ class Client extends ChangeNotifier {
 
               await applyDevicePolicy();
 
-              await newClient.disconnected;
+              await Future.any([newClient.disconnected, cancelled]);
 
               newClient.dispose();
               client = null;
@@ -374,13 +374,15 @@ class Client extends ChangeNotifier {
 
   static CancelableOperation<void> maintainConnection(
     CancelableOperation<Client> Function() connect,
-    Future<void> Function(Client client) handler,
+    Future<void> Function(Client client, Future<void> cancelled) handler,
   ) {
     CancelableOperation<Client>? connectOperation;
     late final Future<void> handlerOperation;
+    final cancelCompleter = Completer<void>();
     final completer = CancelableCompleter<void>(
       onCancel: () async {
         await connectOperation?.cancel();
+        cancelCompleter.complete();
         try {
           await handlerOperation;
         } on Object {
@@ -395,7 +397,7 @@ class Client extends ChangeNotifier {
         try {
           final client = await connectOperation!.valueOrCancellation();
           if (client != null) {
-            await handler(client);
+            await handler(client, cancelCompleter.future);
           }
         } catch (e, s) {
           Zone.current.handleUncaughtError(e, s);

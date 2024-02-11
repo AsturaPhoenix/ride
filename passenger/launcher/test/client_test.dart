@@ -25,7 +25,7 @@ void main() {
                       () => CancelableCompleter<Client>(
                           onCancel: () => cancelCompleter.future).operation,
                     ),
-                (_) async {});
+                (_, __) async {});
             async.flushMicrotasks();
 
             final cancel = Monitor(operation.cancel());
@@ -44,7 +44,7 @@ void main() {
             final handlerCompleter = Completer<void>();
             final operation = Client.maintainConnection(
                 () => CancelableOperation.fromValue(FakeClient()),
-                (client) => handlerCompleter.future);
+                (_, __) => handlerCompleter.future);
             async.flushMicrotasks();
 
             final cancel = Monitor(operation.cancel());
@@ -66,7 +66,7 @@ void main() {
                       () => (connectCompleter = CancelableCompleter<Client>())
                           .operation,
                     ),
-                (_) async {});
+                (_, __) async {});
             async.flushMicrotasks();
 
             connectCompleter!.completeError(Exception());
@@ -114,7 +114,7 @@ void main() {
             runZonedGuarded(
                 () => Client.maintainConnection(
                         () => CancelableOperation.fromValue(FakeClient()),
-                        (client) {
+                        (client, _) {
                       expect(handlerCompleter, isNull);
                       handlerCompleter = Completer<void>();
                       return handlerCompleter!.future;
