@@ -538,10 +538,10 @@ class Server extends ChangeNotifier {
               final futures = <Future>[];
               final now = DateTime.now();
 
-              if (settings case {'temperature': final value as num}) {
-                updates['temperature'] = {'setting': value};
+              if (settings case {'climate': final value as num}) {
+                updates['climate'] = {'setting': value};
                 _lastVehicleBroadcast?['climate']['setting'] = value;
-                futures.add(vehicle.setTemperature(value.toDouble(), now));
+                futures.add(vehicle.setClimate(value.toDouble(), now));
               }
               if (settings case {'volume': final value as num}) {
                 updates['volume'] = {'setting': value};

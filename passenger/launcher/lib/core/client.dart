@@ -149,8 +149,8 @@ class ClientManager extends ChangeNotifier {
     }
   }
 
-  void setTemperature(double value) {
-    FlutterBackgroundService().invoke('setTemperature', {'value': value});
+  void setClimate(double value) {
+    FlutterBackgroundService().invoke('setClimate', {'value': value});
   }
 
   void setVolume(double value) {
@@ -215,7 +215,7 @@ class Client extends ChangeNotifier {
 
       final overlayWindows = [
         OverlayWindow.create(
-          TemperatureControls.main,
+          ClimateControls.main,
           const WindowParams(
             flags: Flag.notFocusable | Flag.notTouchModal | Flag.layoutNoLimits,
             gravity: Gravity.bottom | Gravity.left,
@@ -285,8 +285,8 @@ class Client extends ChangeNotifier {
             setStatus(ClientStatus.disconnected);
           }
         }),
-        service.on('setTemperature').listen((args) {
-          client?.setTemperature((args!['value'] as num).toDouble());
+        service.on('setClimate').listen((args) {
+          client?.setClimate((args!['value'] as num).toDouble());
         }),
         service.on('setVolume').listen((args) {
           client?.setVolume((args!['value'] as num).toDouble());
@@ -512,12 +512,12 @@ class Client extends ChangeNotifier {
 
   void _send(List<dynamic> args) => _socket.add(args);
 
-  void setTemperature(double value) {
+  void setClimate(double value) {
     vehicle.climate.setting.fromDownstream(value);
     notifyListeners();
     _send([
       'vehicle',
-      {'temperature': value},
+      {'climate': value},
     ]);
   }
 

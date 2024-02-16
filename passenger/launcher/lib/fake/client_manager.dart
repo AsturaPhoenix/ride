@@ -8,7 +8,7 @@ class FakeClientManager extends ChangeNotifier implements ClientManager {
   ClientListener? listener;
 
   @override
-  void setTemperature(double value) {
+  void setClimate(double value) {
     vehicle.climate.setting.fromDownstream(value);
     notifyListeners();
   }

@@ -136,7 +136,7 @@ class Vehicle {
   VehicleState state;
 
   final _throttle = (
-    temperature: Throttle(throttlePeriod),
+    climate: Throttle(throttlePeriod),
     volume: Throttle(throttlePeriod),
   );
 
@@ -216,9 +216,9 @@ class Vehicle {
     }
   }
 
-  Future<void> setTemperature(double value, [DateTime? now]) async {
+  Future<void> setClimate(double value, [DateTime? now]) async {
     state.climate.setting.fromDownstream(value, now);
-    await _throttle.temperature.add(
+    await _throttle.climate.add(
       () async => _handlePostResponse(
         await client._call('POST', '$baseEndpoint/command/set_temps', {
           'driver_temp': value,

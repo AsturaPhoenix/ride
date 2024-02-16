@@ -16,7 +16,7 @@ Widget _wrap(Widget child) => MaterialApp(
       ),
     );
 
-class TemperatureControls extends StatelessWidget {
+class ClimateControls extends StatelessWidget {
   // The car seems to use a fudged Celcius-to-Fahrenheit conversion.
   static String format(double temperature) =>
       '${(temperature * 2 + 28).round()}°F';
@@ -26,7 +26,7 @@ class TemperatureControls extends StatelessWidget {
     WidgetsFlutterBinding.ensureInitialized();
     runApp(
       _wrap(
-        TemperatureControls(clientManager: await ClientManager.initialize()),
+        ClimateControls(clientManager: await ClientManager.initialize()),
       ),
     );
   }
@@ -35,7 +35,7 @@ class TemperatureControls extends StatelessWidget {
   final MainAxisSize mainAxisSize;
   final MainAxisAlignment mainAxisAlignment;
   final TextStyle? textStyle;
-  const TemperatureControls({
+  const ClimateControls({
     super.key,
     required this.clientManager,
     this.mainAxisSize = MainAxisSize.max,
@@ -60,7 +60,7 @@ class TemperatureControls extends StatelessWidget {
             min: min,
             max: max,
             step: 0.5, // Tesla uses a .5 degree mapping to Fahrenheit.
-            onChange: clientManager.setTemperature,
+            onChange: clientManager.setClimate,
             child: AspectRatio(
               aspectRatio: 1,
               child: Center(

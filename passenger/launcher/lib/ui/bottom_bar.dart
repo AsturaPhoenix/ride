@@ -18,7 +18,7 @@ class BottomBarControls extends StatelessWidget {
             child: Row(
               children: [
                 Builder(
-                  builder: (context) => TemperatureControls(
+                  builder: (context) => ClimateControls(
                     clientManager: clientManager,
                     mainAxisAlignment: MainAxisAlignment.start,
                     textStyle: Theme.of(context).textTheme.titleLarge,
@@ -74,9 +74,9 @@ class ClimateInfo extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   if (exterior != null)
-                    Text('Ext: ${TemperatureControls.format(exterior)}'),
+                    Text('Ext: ${ClimateControls.format(exterior)}'),
                   if (interior != null)
-                    Text('Int: ${TemperatureControls.format(interior)}'),
+                    Text('Int: ${ClimateControls.format(interior)}'),
                 ],
               ),
             );
